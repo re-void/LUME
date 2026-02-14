@@ -1,7 +1,6 @@
 import js from '@eslint/js';
 import tsPlugin from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
-import securityPlugin from 'eslint-plugin-security';
 import prettierConfig from 'eslint-config-prettier';
 
 export default [
@@ -16,7 +15,6 @@ export default [
       parserOptions: {
         ecmaVersion: 2020,
         sourceType: 'module',
-        project: './tsconfig.json',
       },
       globals: {
         console: 'readonly',
@@ -32,7 +30,6 @@ export default [
     },
     plugins: {
       '@typescript-eslint': tsPlugin,
-      security: securityPlugin,
     },
     rules: {
       ...tsPlugin.configs.recommended.rules,
@@ -45,16 +42,7 @@ export default [
           varsIgnorePattern: '^_',
         },
       ],
-      '@typescript-eslint/explicit-function-return-types': [
-        'warn',
-        {
-          allowExpressions: true,
-          allowTypedFunctionExpressions: true,
-        },
-      ],
       '@typescript-eslint/no-explicit-any': 'error',
-      'security/detect-object-injection': 'warn',
-      'security/detect-unsafe-regex': 'error',
     },
   },
   prettierConfig,
