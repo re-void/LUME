@@ -1,0 +1,24 @@
+app = 'lume-dev-version' # change to your Fly app name
+primary_region = 'iad'
+
+[env]
+  NODE_ENV = 'production'
+  TRUST_PROXY = '1'
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ['app']
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
+
+[mounts]
+  source = 'lume_data'
+  destination = '/app/data'
+

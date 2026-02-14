@@ -1,0 +1,328 @@
+/**
+ * Messenger: chats list / dashboard shell (desktop)
+ * Mobile shows only the chats list.
+ */
+
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { v4 as uuidv4 } from 'uuid';
+import { Button, Input, Modal } from '@/components/ui';
+import MessengerShell from '@/components/messenger/MessengerShell';
+import LeftRail from '@/components/messenger/LeftRail';
+import ChatListPanel from '@/components/messenger/ChatListPanel';
+import RightRail from '@/components/messenger/RightRail';
+import { useMessengerSync } from '@/hooks/useMessengerSync';
+import { useAuthStore, useContactsStore, useChatsStore, useUIStore } from '@/stores';
+import { authApi } from '@/lib/api';
+import { wsClient } from '@/lib/websocket';
+import {
+  panicWipe,
+  saveContacts,
+  exportEncryptedBackup,
+  importEncryptedBackup,
+  type Contact,
+} from '@/crypto/storage';
+
+export default function ChatsPage() {
+  const router = useRouter();
+
+  const { hydrated } = useMessengerSync();
+  const { isAuthenticated, username, pin, clearAuth } = useAuthStore();
+  const { contacts, addContact } = useContactsStore();
+  const { chats, addChat, activeChatId, setActiveChat } = useChatsStore();
+  const { isPanicMode, setPanicMode } = useUIStore();
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showAddContact, setShowAddContact] = useState(false);
+  const [newContactUsername, setNewContactUsername] = useState('');
+  const [addContactError, setAddContactError] = useState('');
+  const [addContactLoading, setAddContactLoading] = useState(false);
+  const [showPanicConfirm, setShowPanicConfirm] = useState(false);
+  const [showBackupModal, setShowBackupModal] = useState(false);
+  const [backupOutput, setBackupOutput] = useState('');
+  const [backupStatus, setBackupStatus] = useState<string | null>(null);
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [importInput, setImportInput] = useState('');
+
+  if (!hydrated) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-[var(--bg-primary)]">
+        <div className="w-8 h-8 border-2 mono-spinner rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    router.push('/');
+    return null;
+  }
+
+  const handleSelectChat = (chatId: string) => {
+    setActiveChat(chatId);
+    router.push(`/chat/${chatId}`);
+  };
+
+  const openChatForContact = (contactId: string) => {
+    const existing = useChatsStore.getState().chats.find((c) => c.contactId === contactId);
+    let chatId = existing?.id;
+    if (!chatId) {
+      chatId = uuidv4();
+      addChat({
+        id: chatId,
+        contactId,
+        messages: [],
+        unreadCount: 0,
+        isHidden: false,
+      });
+    }
+    setActiveChat(chatId);
+    router.push(`/chat/${chatId}`);
+  };
+
+  const handleAddContact = async () => {
+    setAddContactError('');
+    setAddContactLoading(true);
+
+    try {
+      const normalized = newContactUsername.trim();
+      const { data, error } = await authApi.getUser(normalized);
+      if (error || !data) {
+        setAddContactError('User not found');
+        return;
+      }
+
+      if (data.username === username) {
+        setAddContactError('Cannot add yourself');
+        return;
+      }
+
+      if (useContactsStore.getState().contacts.some((c) => c.username === data.username)) {
+        setAddContactError('Contact already added');
+        return;
+      }
+
+      const newContact: Contact = {
+        id: data.id,
+        username: data.username,
+        publicKey: data.identityKey,
+        exchangeKey: data.exchangeIdentityKey || data.exchangeKey || data.signedPrekey,
+        addedAt: Date.now(),
+      };
+
+      const latestContacts = useContactsStore.getState().contacts;
+      addContact(newContact);
+
+      if (pin) {
+        await saveContacts([...latestContacts, newContact], pin);
+      }
+
+      setShowAddContact(false);
+      setNewContactUsername('');
+
+      openChatForContact(data.id);
+    } catch (e) {
+      console.error('Add contact error:', e);
+      setAddContactError('Error adding contact');
+    } finally {
+      setAddContactLoading(false);
+    }
+  };
+
+  const executePanic = async () => {
+    setPanicMode(true);
+    wsClient.disconnect();
+    await panicWipe();
+    clearAuth();
+    router.push('/');
+  };
+
+  if (isPanicMode) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <p className="text-[var(--text-secondary)] uppercase tracking-[0.18em] text-sm">No messages</p>
+      </div>
+    );
+  }
+
+  const emptyMain = (
+    <div className="lume-panel h-full min-h-0 rounded-[var(--radius-lg)] border border-[var(--border)] shadow-[var(--shadow-sm)] overflow-hidden">
+      <div className="h-full flex flex-col items-center justify-center px-8 text-center">
+        <div className="w-16 h-16 rounded-full border border-[var(--border)] bg-[var(--surface-strong)] shadow-[var(--shadow-sm)] flex items-center justify-center text-[var(--text-muted)]">
+          <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M21 15a4 4 0 01-4 4H8l-5 3V7a4 4 0 014-4h10a4 4 0 014 4v8z" />
+          </svg>
+        </div>
+        <h3 className="mt-5 text-[14px] font-semibold uppercase tracking-[0.14em] text-[var(--text-primary)]">
+          Select a chat
+        </h3>
+        <p className="mt-2 text-[12px] text-[var(--text-muted)] max-w-sm">
+          Choose a conversation from the list or start a new one.
+        </p>
+        <div className="mt-6 w-full max-w-xs">
+          <button className="apple-button" onClick={() => setShowAddContact(true)}>
+            Start Chat
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const chatListNode = (
+    <ChatListPanel
+      chats={chats}
+      contacts={contacts}
+      selectedChatId={activeChatId}
+      searchQuery={searchQuery}
+      onSearchChange={setSearchQuery}
+      onSelectChat={handleSelectChat}
+      onNewChat={() => setShowAddContact(true)}
+    />
+  );
+
+  return (
+    <div className="h-[100dvh] w-full overflow-hidden">
+      {/* Mobile: chats list only */}
+      <div className="md:hidden h-full min-h-0 p-3 sm:p-5">
+        {chatListNode}
+      </div>
+
+      {/* Desktop: 4-column dashboard like the reference */}
+      <div className="hidden md:block h-full min-h-0">
+        <MessengerShell
+          leftRail={<LeftRail onPanic={() => setShowPanicConfirm(true)} onOpenBackup={() => setShowBackupModal(true)} />}
+          chatList={chatListNode}
+          main={emptyMain}
+          rightRail={
+            contacts.length > 0 ? (
+              <RightRail
+                contacts={contacts}
+                chats={chats}
+                activeChatId={activeChatId}
+                onOpenContact={openChatForContact}
+              />
+            ) : undefined
+          }
+        />
+      </div>
+
+      <Modal
+        isOpen={showAddContact}
+        onClose={() => {
+          setShowAddContact(false);
+          setNewContactUsername('');
+          setAddContactError('');
+        }}
+        title="Start Chat"
+      >
+        <div className="space-y-4">
+          <Input
+            label="Recipient Username"
+            value={newContactUsername}
+            onChange={(e) => setNewContactUsername(e.target.value.replace(/^@+/, ''))}
+            placeholder="username"
+            error={addContactError}
+            icon={<span className="text-[var(--text-muted)]">@</span>}
+          />
+          <Button fullWidth onClick={handleAddContact} loading={addContactLoading} disabled={!newContactUsername}>
+            Start
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal isOpen={showPanicConfirm} onClose={() => setShowPanicConfirm(false)} title="Wipe Data?">
+        <div className="space-y-6">
+          <p className="text-[var(--text-secondary)]">
+            This will delete all local keys, contacts and messages on this device. It cannot be undone.
+          </p>
+          <div className="flex gap-3">
+            <button onClick={() => setShowPanicConfirm(false)} className="flex-1 apple-button-secondary">
+              Cancel
+            </button>
+            <button onClick={executePanic} className="flex-1 apple-button">
+              Wipe
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={showBackupModal} onClose={() => setShowBackupModal(false)} title="Backup & Restore">
+        <div className="space-y-4">
+          <p className="text-[var(--text-secondary)] text-sm">
+            Экспортирует ключи/чаты/контакты в зашифрованный blob (нужен текущий PIN). Храните офлайн.
+          </p>
+          <Button
+            fullWidth
+            loading={backupLoading}
+            onClick={async () => {
+              if (!pin) {
+                setBackupStatus('Нужен PIN (разблокируйте сессию).');
+                return;
+              }
+              setBackupStatus(null);
+              setBackupLoading(true);
+              try {
+                const data = await exportEncryptedBackup(pin);
+                setBackupOutput(data);
+                await navigator.clipboard.writeText(data).catch(() => undefined);
+                setBackupStatus('Бэкап готов (скопирован в буфер, если разрешено).');
+              } catch (e) {
+                setBackupStatus('Ошибка бэкапа: ' + (e as Error).message);
+              } finally {
+                setBackupLoading(false);
+              }
+            }}
+          >
+            Экспортировать
+          </Button>
+
+          {backupOutput && (
+            <textarea
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] text-xs p-3 font-mono"
+              rows={5}
+              readOnly
+              value={backupOutput}
+            />
+          )}
+
+          <div className="space-y-2">
+            <textarea
+              className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] text-xs p-3 font-mono"
+              rows={4}
+              placeholder="Вставьте зашифрованный бэкап сюда"
+              value={importInput}
+              onChange={(e) => setImportInput(e.target.value.trim())}
+            />
+            <Button
+              fullWidth
+              variant="secondary"
+              loading={backupLoading}
+              disabled={!importInput}
+              onClick={async () => {
+                if (!pin) {
+                  setBackupStatus('Нужен PIN (разблокируйте сессию).');
+                  return;
+                }
+                setBackupStatus(null);
+                setBackupLoading(true);
+                try {
+                  await importEncryptedBackup(importInput, pin);
+                  setBackupStatus('Бэкап восстановлен. Перезапустите приложение.');
+                } catch (e) {
+                  setBackupStatus('Ошибка восстановления: ' + (e as Error).message);
+                } finally {
+                  setBackupLoading(false);
+                }
+              }}
+            >
+              Восстановить
+            </Button>
+          </div>
+
+          {backupStatus && <p className="text-xs text-[var(--text-secondary)]">{backupStatus}</p>}
+        </div>
+      </Modal>
+    </div>
+  );
+}

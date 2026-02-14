@@ -1,0 +1,44 @@
+# Root .gitignore for LUME monorepo
+
+# Dependencies
+node_modules/
+
+# Build outputs
+.next/
+out/
+dist/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+.env.production
+
+# Database files (local dev)
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# TypeScript
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+
+# Test coverage
+coverage/
+.nyc_output/
