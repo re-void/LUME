@@ -3,24 +3,25 @@
  * Minimal storage: public keys, prekeys, and pending messages.
  */
 
-import Database from 'better-sqlite3';
-import path from 'path';
-import fs from 'fs';
+import Database from "better-sqlite3";
+import path from "path";
+import fs from "fs";
 
-const DEFAULT_DB_PATH = path.join(__dirname, '../../data/messenger.db');
+const DEFAULT_DB_PATH = path.join(__dirname, "../../data/messenger.db");
 const DB_PATH = (process.env.DB_PATH || DEFAULT_DB_PATH).trim();
-const RESOLVED_DB_PATH = DB_PATH === ':memory:' ? DB_PATH : path.resolve(DB_PATH);
+const RESOLVED_DB_PATH =
+  DB_PATH === ":memory:" ? DB_PATH : path.resolve(DB_PATH);
 
-if (RESOLVED_DB_PATH !== ':memory:') {
+if (RESOLVED_DB_PATH !== ":memory:") {
   fs.mkdirSync(path.dirname(RESOLVED_DB_PATH), { recursive: true });
 }
 
 const db = new Database(RESOLVED_DB_PATH);
 
 // Pragmas
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
-db.pragma('busy_timeout = 3000');
+db.pragma("journal_mode = WAL");
+db.pragma("foreign_keys = ON");
+db.pragma("busy_timeout = 3000");
 
 // ==================== Tables ====================
 
@@ -72,17 +73,25 @@ db.exec(`
 // Older DBs were created before `exchange_identity_key` existed.
 // Ensure the column exists before creating the unique index.
 try {
-  const userColumns = db.prepare(`PRAGMA table_info(users)`).all() as Array<{ name: string }>;
-  const hasExchange = userColumns.some((col) => col.name === 'exchange_identity_key');
+  const userColumns = db.prepare(`PRAGMA table_info(users)`).all() as Array<{
+    name: string;
+  }>;
+  const hasExchange = userColumns.some(
+    (col) => col.name === "exchange_identity_key",
+  );
 
   if (!hasExchange) {
     db.exec(`ALTER TABLE users ADD COLUMN exchange_identity_key TEXT`);
   }
 
-  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_exchange_identity_key_unique ON users(exchange_identity_key)`);
+  db.exec(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_exchange_identity_key_unique ON users(exchange_identity_key)`,
+  );
 
   // Backfill for existing rows (safe to run repeatedly).
-  db.exec(`UPDATE users SET exchange_identity_key = signed_prekey WHERE exchange_identity_key IS NULL`);
+  db.exec(
+    `UPDATE users SET exchange_identity_key = signed_prekey WHERE exchange_identity_key IS NULL`,
+  );
 } catch {
   // Keep running - new DBs will still be created correctly above.
 }
@@ -212,9 +221,16 @@ export const database = {
     identityKey: string,
     exchangeIdentityKey: string,
     signedPrekey: string,
-    signedPrekeySignature: string
+    signedPrekeySignature: string,
   ): void {
-    insertUser.run(id, username, identityKey, exchangeIdentityKey, signedPrekey, signedPrekeySignature);
+    insertUser.run(
+      id,
+      username,
+      identityKey,
+      exchangeIdentityKey,
+      signedPrekey,
+      signedPrekeySignature,
+    );
   },
 
   getUserByUsername(username: string): User | undefined {
@@ -237,7 +253,11 @@ export const database = {
     updateLastSeen.run(userId);
   },
 
-  setSignedPrekey(userId: string, signedPrekey: string, signedPrekeySignature: string): void {
+  setSignedPrekey(
+    userId: string,
+    signedPrekey: string,
+    signedPrekeySignature: string,
+  ): void {
     updateSignedPrekey.run(signedPrekey, signedPrekeySignature, userId);
   },
 
@@ -245,7 +265,10 @@ export const database = {
     deleteUser.run(userId);
   },
 
-  addPrekeys(userId: string, prekeys: Array<{ id: string; publicKey: string }>): void {
+  addPrekeys(
+    userId: string,
+    prekeys: Array<{ id: string; publicKey: string }>,
+  ): void {
     const insertMany = db.transaction((keys: typeof prekeys) => {
       for (const key of keys) {
         insertPrekey.run(`${userId}:${key.id}`, userId, key.publicKey);
@@ -260,7 +283,9 @@ export const database = {
   },
 
   consumePrekey(userId: string): string | null {
-    const result = getAndDeletePrekey.get(userId) as { public_key: string } | undefined;
+    const result = getAndDeletePrekey.get(userId) as
+      | { public_key: string }
+      | undefined;
     return result?.public_key ?? null;
   },
 
@@ -269,7 +294,12 @@ export const database = {
     return result.count;
   },
 
-  queueMessage(id: string, senderId: string, recipientId: string, encryptedPayload: string): void {
+  queueMessage(
+    id: string,
+    senderId: string,
+    recipientId: string,
+    encryptedPayload: string,
+  ): void {
     insertMessage.run(id, senderId, recipientId, encryptedPayload);
   },
 
@@ -279,8 +309,10 @@ export const database = {
 
   getUsersByIds(userIds: string[]): User[] {
     if (userIds.length === 0) return [];
-    const placeholders = userIds.map(() => '?').join(', ');
-    const stmt = db.prepare(`SELECT * FROM users WHERE id IN (${placeholders})`);
+    const placeholders = userIds.map(() => "?").join(", ");
+    const stmt = db.prepare(
+      `SELECT * FROM users WHERE id IN (${placeholders})`,
+    );
     return stmt.all(...userIds) as User[];
   },
 

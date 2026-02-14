@@ -1,26 +1,28 @@
-import { Router, Request, Response } from 'express';
-import { v4 as uuidv4 } from 'uuid';
-import jwt from 'jsonwebtoken';
-import nacl from 'tweetnacl';
-import { decodeBase64 } from 'tweetnacl-util';
-import rateLimit from 'express-rate-limit';
+import { Router, Request, Response } from "express";
+import { v4 as uuidv4 } from "uuid";
+import jwt from "jsonwebtoken";
+import nacl from "tweetnacl";
+import { decodeBase64 } from "tweetnacl-util";
+import rateLimit from "express-rate-limit";
 
-import database from '../db/database';
-import { requireSignature } from '../middleware/auth';
+import database from "../db/database";
+import { requireSignature } from "../middleware/auth";
 import {
   isValidBase64Key,
   isValidPrekeys,
   isValidSignature,
   isValidUsername,
   isValidUuidLike,
-} from '../utils/validators';
+} from "../utils/validators";
 
 const router = Router();
-const LOG_SECURITY = process.env.LOG_SECURITY === '1';
+const LOG_SECURITY = process.env.LOG_SECURITY === "1";
 
 function audit(event: string, details: Record<string, unknown>) {
   if (!LOG_SECURITY) return;
-  const safeDetails = JSON.stringify(details, (_k, v) => (typeof v === 'string' && v.length > 64 ? `${v.slice(0, 32)}…` : v));
+  const safeDetails = JSON.stringify(details, (_k, v) =>
+    typeof v === "string" && v.length > 64 ? `${v.slice(0, 32)}…` : v,
+  );
   console.log(`[audit] ${event} ${safeDetails}`);
 }
 
@@ -31,7 +33,7 @@ const registerRateLimit = rateLimit({
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req: Request): string => `ip:${req.ip || '127.0.0.1'}`,
+  keyGenerator: (req: Request): string => `ip:${req.ip || "127.0.0.1"}`,
 });
 
 const usernameCheckRateLimit = rateLimit({
@@ -39,7 +41,7 @@ const usernameCheckRateLimit = rateLimit({
   max: 60,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req: Request): string => `ip:${req.ip || '127.0.0.1'}`,
+  keyGenerator: (req: Request): string => `ip:${req.ip || "127.0.0.1"}`,
 });
 
 const sessionRateLimit = rateLimit({
@@ -55,7 +57,7 @@ const sessionRateLimit = rateLimit({
         return `uid:${user.id}`;
       }
     }
-    return `ip:${req.ip || '127.0.0.1'}`;
+    return `ip:${req.ip || "127.0.0.1"}`;
   },
 });
 
@@ -73,7 +75,7 @@ const keysRateLimit = rateLimit({
         return `uid:${user.id}`;
       }
     }
-    return `ip:${req.ip || '127.0.0.1'}`;
+    return `ip:${req.ip || "127.0.0.1"}`;
   },
 });
 
@@ -104,13 +106,17 @@ interface GetUserResponse {
 function verifySignature(
   signedPrekey: string,
   signature: string,
-  identityKey: string
+  identityKey: string,
 ): boolean {
   try {
     const messageBytes = decodeBase64(signedPrekey);
     const signatureBytes = decodeBase64(signature);
     const publicKeyBytes = decodeBase64(identityKey);
-    return nacl.sign.detached.verify(messageBytes, signatureBytes, publicKeyBytes);
+    return nacl.sign.detached.verify(
+      messageBytes,
+      signatureBytes,
+      publicKeyBytes,
+    );
   } catch {
     return false;
   }
@@ -119,62 +125,79 @@ function verifySignature(
 // === Routes =================================================================
 
 // POST /auth/register
-router.post('/register', registerRateLimit, (req: Request, res: Response) => {
+router.post("/register", registerRateLimit, (req: Request, res: Response) => {
   try {
     const body = req.body as RegisterRequest;
-    if (!body || typeof body !== 'object') {
-      res.status(400).json({ error: 'Invalid request body' });
+    if (!body || typeof body !== "object") {
+      res.status(400).json({ error: "Invalid request body" });
       return;
     }
 
-    body.username = typeof body.username === 'string' ? body.username.trim() : (body.username as string);
+    body.username =
+      typeof body.username === "string"
+        ? body.username.trim()
+        : (body.username as string);
 
     if (!isValidUsername(body.username)) {
       res.status(400).json({
-        error: 'Invalid username. Must be 3-32 characters, alphanumeric and underscores only.',
+        error:
+          "Invalid username. Must be 3-32 characters, alphanumeric and underscores only.",
       });
       return;
     }
 
     const existingUser = database.getUserByUsername(body.username);
     if (existingUser) {
-      res.status(409).json({ error: 'Username already taken' });
+      res.status(409).json({ error: "Username already taken" });
       return;
     }
 
     if (!isValidBase64Key(body.identityKey)) {
-      res.status(400).json({ error: 'Invalid identity key' });
+      res.status(400).json({ error: "Invalid identity key" });
       return;
     }
 
-    if (body.exchangeIdentityKey !== undefined && !isValidBase64Key(body.exchangeIdentityKey)) {
-      res.status(400).json({ error: 'Invalid exchange identity key' });
+    if (
+      body.exchangeIdentityKey !== undefined &&
+      !isValidBase64Key(body.exchangeIdentityKey)
+    ) {
+      res.status(400).json({ error: "Invalid exchange identity key" });
       return;
     }
 
     if (!isValidBase64Key(body.signedPrekey)) {
-      res.status(400).json({ error: 'Invalid signed prekey' });
+      res.status(400).json({ error: "Invalid signed prekey" });
       return;
     }
 
     if (!isValidSignature(body.signedPrekeySignature)) {
-      res.status(400).json({ error: 'Invalid signed prekey signature format' });
+      res.status(400).json({ error: "Invalid signed prekey signature format" });
       return;
     }
 
-    if (body.oneTimePrekeys !== undefined && !isValidPrekeys(body.oneTimePrekeys)) {
-      res.status(400).json({ error: 'Invalid one-time prekeys format' });
+    if (
+      body.oneTimePrekeys !== undefined &&
+      !isValidPrekeys(body.oneTimePrekeys)
+    ) {
+      res.status(400).json({ error: "Invalid one-time prekeys format" });
       return;
     }
 
-    if (!verifySignature(body.signedPrekey, body.signedPrekeySignature, body.identityKey)) {
-      res.status(400).json({ error: 'Invalid signed prekey signature' });
+    if (
+      !verifySignature(
+        body.signedPrekey,
+        body.signedPrekeySignature,
+        body.identityKey,
+      )
+    ) {
+      res.status(400).json({ error: "Invalid signed prekey signature" });
       return;
     }
 
     const userId = uuidv4();
     const exchangeIdentityKey =
-      typeof body.exchangeIdentityKey === 'string' && isValidBase64Key(body.exchangeIdentityKey)
+      typeof body.exchangeIdentityKey === "string" &&
+      isValidBase64Key(body.exchangeIdentityKey)
         ? body.exchangeIdentityKey
         : body.signedPrekey;
 
@@ -184,7 +207,7 @@ router.post('/register', registerRateLimit, (req: Request, res: Response) => {
       body.identityKey,
       exchangeIdentityKey,
       body.signedPrekey,
-      body.signedPrekeySignature
+      body.signedPrekeySignature,
     );
 
     if (body.oneTimePrekeys && body.oneTimePrekeys.length > 0) {
@@ -194,141 +217,159 @@ router.post('/register', registerRateLimit, (req: Request, res: Response) => {
     res.status(201).json({
       id: userId,
       username: body.username,
-      message: 'Registration successful',
+      message: "Registration successful",
     });
-    audit('register', { userId, username: body.username });
+    audit("register", { userId, username: body.username });
   } catch (error) {
     if (error instanceof Error) {
-      if (error.message.includes('UNIQUE constraint failed: users.username')) {
-        res.status(409).json({ error: 'Username already taken' });
+      if (error.message.includes("UNIQUE constraint failed: users.username")) {
+        res.status(409).json({ error: "Username already taken" });
         return;
       }
-      if (error.message.includes('UNIQUE constraint failed: users.identity_key')) {
-        res.status(409).json({ error: 'Identity key already registered' });
+      if (
+        error.message.includes("UNIQUE constraint failed: users.identity_key")
+      ) {
+        res.status(409).json({ error: "Identity key already registered" });
         return;
       }
     }
-    console.error('Registration error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Registration error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 // GET /auth/user/:username
-router.get('/user/:username', usernameCheckRateLimit, (req: Request, res: Response) => {
-  try {
-    const username = (req.params.username as string).trim();
-    if (!isValidUsername(username)) {
-      res.status(400).json({ error: 'Invalid username format' });
-      return;
+router.get(
+  "/user/:username",
+  usernameCheckRateLimit,
+  (req: Request, res: Response) => {
+    try {
+      const username = (req.params.username as string).trim();
+      if (!isValidUsername(username)) {
+        res.status(400).json({ error: "Invalid username format" });
+        return;
+      }
+
+      const user = database.getUserByUsername(username);
+      if (!user) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+      const exchangeIdentityKey =
+        user.exchange_identity_key || user.signed_prekey;
+
+      const response: GetUserResponse = {
+        id: user.id,
+        username: user.username,
+        identityKey: user.identity_key,
+        exchangeKey: exchangeIdentityKey,
+        exchangeIdentityKey,
+        signedPrekey: user.signed_prekey,
+        signedPrekeySignature: user.signed_prekey_signature,
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error("Get user error:", error);
+      res.status(500).json({ error: "Internal server error" });
     }
-
-    const user = database.getUserByUsername(username);
-    if (!user) {
-      res.status(404).json({ error: 'User not found' });
-      return;
-    }
-    const exchangeIdentityKey = user.exchange_identity_key || user.signed_prekey;
-
-    const response: GetUserResponse = {
-      id: user.id,
-      username: user.username,
-      identityKey: user.identity_key,
-      exchangeKey: exchangeIdentityKey,
-      exchangeIdentityKey,
-      signedPrekey: user.signed_prekey,
-      signedPrekeySignature: user.signed_prekey_signature,
-    };
-
-    res.json(response);
-  } catch (error) {
-    console.error('Get user error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+  },
+);
 
 // POST /auth/bundle
 // Returns a prekey bundle and consumes one one-time prekey (if available).
-router.post('/bundle', requireSignature, keysRateLimit, (req: Request, res: Response) => {
-  try {
-    const body = req.body as { username?: string };
-    const username = typeof body?.username === 'string' ? body.username.trim() : '';
-    if (!isValidUsername(username)) {
-      res.status(400).json({ error: 'Invalid username format' });
-      return;
+router.post(
+  "/bundle",
+  requireSignature,
+  keysRateLimit,
+  (req: Request, res: Response) => {
+    try {
+      const body = req.body as { username?: string };
+      const username =
+        typeof body?.username === "string" ? body.username.trim() : "";
+      if (!isValidUsername(username)) {
+        res.status(400).json({ error: "Invalid username format" });
+        return;
+      }
+
+      const user = database.getUserByUsername(username);
+      if (!user) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+
+      const exchangeIdentityKey =
+        user.exchange_identity_key || user.signed_prekey;
+      const oneTimePrekey = database.consumePrekey(user.id);
+
+      const response: GetUserResponse = {
+        id: user.id,
+        username: user.username,
+        identityKey: user.identity_key,
+        exchangeKey: exchangeIdentityKey,
+        exchangeIdentityKey,
+        signedPrekey: user.signed_prekey,
+        signedPrekeySignature: user.signed_prekey_signature,
+      };
+
+      if (oneTimePrekey) {
+        response.oneTimePrekey = oneTimePrekey;
+      }
+
+      res.json(response);
+    } catch (error) {
+      console.error("Get bundle error:", error);
+      res.status(500).json({ error: "Internal server error" });
     }
-
-    const user = database.getUserByUsername(username);
-    if (!user) {
-      res.status(404).json({ error: 'User not found' });
-      return;
-    }
-
-    const exchangeIdentityKey = user.exchange_identity_key || user.signed_prekey;
-    const oneTimePrekey = database.consumePrekey(user.id);
-
-    const response: GetUserResponse = {
-      id: user.id,
-      username: user.username,
-      identityKey: user.identity_key,
-      exchangeKey: exchangeIdentityKey,
-      exchangeIdentityKey,
-      signedPrekey: user.signed_prekey,
-      signedPrekeySignature: user.signed_prekey_signature,
-    };
-
-    if (oneTimePrekey) {
-      response.oneTimePrekey = oneTimePrekey;
-    }
-
-    res.json(response);
-  } catch (error) {
-    console.error('Get bundle error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+  },
+);
 
 // GET /auth/check/:username
-router.get('/check/:username', usernameCheckRateLimit, (req: Request, res: Response) => {
-  try {
-    const username = (req.params.username as string).trim();
+router.get(
+  "/check/:username",
+  usernameCheckRateLimit,
+  (req: Request, res: Response) => {
+    try {
+      const username = (req.params.username as string).trim();
 
-    if (!isValidUsername(username)) {
-      res.json({ available: false, reason: 'Invalid format' });
-      return;
+      if (!isValidUsername(username)) {
+        res.json({ available: false, reason: "Invalid format" });
+        return;
+      }
+
+      const user = database.getUserByUsername(username);
+      res.json({ available: !user });
+    } catch (error) {
+      console.error("Check username error:", error);
+      res.status(500).json({ error: "Internal server error" });
     }
-
-    const user = database.getUserByUsername(username);
-    res.json({ available: !user });
-  } catch (error) {
-    console.error('Check username error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+  },
+);
 
 // POST /auth/prekeys
-router.post('/prekeys', requireSignature, (req: Request, res: Response) => {
+router.post("/prekeys", requireSignature, (req: Request, res: Response) => {
   try {
     const { userId, prekeys } = req.body as {
       userId: string;
       prekeys: Array<{ id: string; publicKey: string }>;
     };
     if (!isValidUuidLike(userId)) {
-      res.status(400).json({ error: 'Invalid userId' });
+      res.status(400).json({ error: "Invalid userId" });
       return;
     }
     if (!isValidPrekeys(prekeys)) {
-      res.status(400).json({ error: 'Invalid prekeys payload' });
+      res.status(400).json({ error: "Invalid prekeys payload" });
       return;
     }
 
     const user = database.getUserById(userId);
     if (!user) {
-      res.status(404).json({ error: 'User not found' });
+      res.status(404).json({ error: "User not found" });
       return;
     }
 
     if (user.identity_key !== req.user?.identityKey) {
-      res.status(403).json({ error: 'Unauthorized: Identity key mismatch' });
+      res.status(403).json({ error: "Unauthorized: Identity key mismatch" });
       return;
     }
 
@@ -336,127 +377,145 @@ router.post('/prekeys', requireSignature, (req: Request, res: Response) => {
 
     const count = database.getPrekeyCount(userId);
     res.json({
-      message: 'Prekeys uploaded',
+      message: "Prekeys uploaded",
       totalPrekeys: count,
     });
   } catch (error) {
-    console.error('Upload prekeys error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Upload prekeys error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 // POST /auth/keys
-router.post('/keys', requireSignature, keysRateLimit, (req: Request, res: Response) => {
-  try {
-    const { userId, signedPrekey, signedPrekeySignature } = req.body as {
-      userId: string;
-      signedPrekey: string;
-      signedPrekeySignature: string;
-    };
+router.post(
+  "/keys",
+  requireSignature,
+  keysRateLimit,
+  (req: Request, res: Response) => {
+    try {
+      const { userId, signedPrekey, signedPrekeySignature } = req.body as {
+        userId: string;
+        signedPrekey: string;
+        signedPrekeySignature: string;
+      };
 
-    if (!isValidUuidLike(userId)) {
-      res.status(400).json({ error: 'Invalid userId' });
-      return;
-    }
-    if (!isValidBase64Key(signedPrekey)) {
-      res.status(400).json({ error: 'Invalid signed prekey' });
-      return;
-    }
-    if (!isValidSignature(signedPrekeySignature)) {
-      res.status(400).json({ error: 'Invalid signed prekey signature format' });
-      return;
-    }
+      if (!isValidUuidLike(userId)) {
+        res.status(400).json({ error: "Invalid userId" });
+        return;
+      }
+      if (!isValidBase64Key(signedPrekey)) {
+        res.status(400).json({ error: "Invalid signed prekey" });
+        return;
+      }
+      if (!isValidSignature(signedPrekeySignature)) {
+        res
+          .status(400)
+          .json({ error: "Invalid signed prekey signature format" });
+        return;
+      }
 
-    const user = database.getUserById(userId);
-    if (!user) {
-      res.status(404).json({ error: 'User not found' });
-      return;
-    }
-    if (user.identity_key !== req.user?.identityKey) {
-      res.status(403).json({ error: 'Unauthorized: Identity key mismatch' });
-      return;
-    }
-    if (!verifySignature(signedPrekey, signedPrekeySignature, user.identity_key)) {
-      res.status(400).json({ error: 'Invalid signed prekey signature' });
-      return;
-    }
+      const user = database.getUserById(userId);
+      if (!user) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+      if (user.identity_key !== req.user?.identityKey) {
+        res.status(403).json({ error: "Unauthorized: Identity key mismatch" });
+        return;
+      }
+      if (
+        !verifySignature(signedPrekey, signedPrekeySignature, user.identity_key)
+      ) {
+        res.status(400).json({ error: "Invalid signed prekey signature" });
+        return;
+      }
 
-    database.setSignedPrekey(userId, signedPrekey, signedPrekeySignature);
-    res.json({ message: 'Signed prekey updated' });
-  } catch (error) {
-    console.error('Update signed prekey error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+      database.setSignedPrekey(userId, signedPrekey, signedPrekeySignature);
+      res.json({ message: "Signed prekey updated" });
+    } catch (error) {
+      console.error("Update signed prekey error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  },
+);
 
 // DELETE /auth/user/:userId
-router.delete('/user/:userId', requireSignature, (req: Request, res: Response) => {
-  try {
-    const userId = req.params.userId as string;
+router.delete(
+  "/user/:userId",
+  requireSignature,
+  (req: Request, res: Response) => {
+    try {
+      const userId = req.params.userId as string;
 
-    if (!isValidUuidLike(userId)) {
-      res.status(400).json({ error: 'Invalid userId' });
-      return;
+      if (!isValidUuidLike(userId)) {
+        res.status(400).json({ error: "Invalid userId" });
+        return;
+      }
+
+      const user = database.getUserById(userId);
+      if (!user) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+
+      if (user.identity_key !== req.user?.identityKey) {
+        res.status(403).json({ error: "Unauthorized: Identity key mismatch" });
+        return;
+      }
+
+      database.deleteUser(userId);
+      res.json({ message: "Account deleted" });
+      audit("delete_user", { userId });
+    } catch (error) {
+      console.error("Delete user error:", error);
+      res.status(500).json({ error: "Internal server error" });
     }
-
-    const user = database.getUserById(userId);
-    if (!user) {
-      res.status(404).json({ error: 'User not found' });
-      return;
-    }
-
-    if (user.identity_key !== req.user?.identityKey) {
-      res.status(403).json({ error: 'Unauthorized: Identity key mismatch' });
-      return;
-    }
-
-    database.deleteUser(userId);
-    res.json({ message: 'Account deleted' });
-    audit('delete_user', { userId });
-  } catch (error) {
-    console.error('Delete user error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+  },
+);
 
 // POST /auth/session
-router.post('/session', requireSignature, sessionRateLimit, (req: Request, res: Response) => {
-  try {
-    const userId = req.body.userId;
+router.post(
+  "/session",
+  requireSignature,
+  sessionRateLimit,
+  (req: Request, res: Response) => {
+    try {
+      const userId = req.body.userId;
 
-    if (!isValidUuidLike(userId)) {
-      res.status(400).json({ error: 'Missing userId' });
-      return;
-    }
-
-    const user = database.getUserById(userId);
-    if (!user) {
-      res.status(404).json({ error: 'User not found' });
-      return;
-    }
-
-    if (user.identity_key !== req.user?.identityKey) {
-      res.status(403).json({ error: 'Identity key mismatch' });
-      return;
-    }
-
-    const token = jwt.sign(
-      { sub: userId },
-      process.env.WS_JWT_SECRET as string,
-      {
-        algorithm: 'HS256',
-        expiresIn: '10m',
-        issuer: 'lume',
-        audience: 'lume-ws',
+      if (!isValidUuidLike(userId)) {
+        res.status(400).json({ error: "Missing userId" });
+        return;
       }
-    );
 
-    res.json({ token, expiresIn: 600 });
-    audit('session_issue', { userId });
-  } catch (error) {
-    console.error('Session error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+      const user = database.getUserById(userId);
+      if (!user) {
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+
+      if (user.identity_key !== req.user?.identityKey) {
+        res.status(403).json({ error: "Identity key mismatch" });
+        return;
+      }
+
+      const token = jwt.sign(
+        { sub: userId },
+        process.env.WS_JWT_SECRET as string,
+        {
+          algorithm: "HS256",
+          expiresIn: "10m",
+          issuer: "lume",
+          audience: "lume-ws",
+        },
+      );
+
+      res.json({ token, expiresIn: 600 });
+      audit("session_issue", { userId });
+    } catch (error) {
+      console.error("Session error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  },
+);
 
 export default router;

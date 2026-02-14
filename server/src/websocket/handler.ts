@@ -1,9 +1,12 @@
-import { WebSocket, WebSocketServer } from 'ws';
-import { IncomingMessage } from 'http';
-import jwt from 'jsonwebtoken';
+import { WebSocket, WebSocketServer } from "ws";
+import { IncomingMessage } from "http";
+import jwt from "jsonwebtoken";
 
-import database from '../db/database';
-import { buildOriginAllowlist, isOriginAllowed } from '../utils/originAllowlist';
+import database from "../db/database";
+import {
+  buildOriginAllowlist,
+  isOriginAllowed,
+} from "../utils/originAllowlist";
 
 // Connected users map: userId -> Set<WebSocket>
 const connectedUsers = new Map<string, Set<WebSocket>>();
@@ -11,8 +14,10 @@ const connectedUsers = new Map<string, Set<WebSocket>>();
 // Rate limits
 const connectionRateLimits = new Map<string, number[]>(); // IP -> timestamps
 const typingRateLimits = new Map<string, { lastAt: number; state: boolean }>();
-const ORIGIN_ALLOWLIST = buildOriginAllowlist(process.env.CLIENT_ORIGIN || 'http://localhost:3000');
-const IS_PROD = process.env.NODE_ENV === 'production';
+const ORIGIN_ALLOWLIST = buildOriginAllowlist(
+  process.env.CLIENT_ORIGIN || "http://localhost:3000",
+);
+const IS_PROD = process.env.NODE_ENV === "production";
 
 let rateLimitCleanupInterval: NodeJS.Timeout | null = null;
 
@@ -27,21 +32,25 @@ interface WSMessage {
 }
 
 interface TypingMessage extends WSMessage {
-  type: 'typing';
+  type: "typing";
   recipientId: string;
   isTyping: boolean;
 }
 
 function getClientIp(req: IncomingMessage): string {
   const trustProxy =
-    process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true' ||
-    process.env.WS_TRUST_PROXY === '1' || process.env.WS_TRUST_PROXY === 'true';
-  const xForwardedFor = req.headers['x-forwarded-for'];
+    process.env.TRUST_PROXY === "1" ||
+    process.env.TRUST_PROXY === "true" ||
+    process.env.WS_TRUST_PROXY === "1" ||
+    process.env.WS_TRUST_PROXY === "true";
+  const xForwardedFor = req.headers["x-forwarded-for"];
   if (trustProxy && xForwardedFor) {
-    const ips = (Array.isArray(xForwardedFor) ? xForwardedFor[0] : xForwardedFor).split(',');
+    const ips = (
+      Array.isArray(xForwardedFor) ? xForwardedFor[0] : xForwardedFor
+    ).split(",");
     return ips[0].trim();
   }
-  return req.socket.remoteAddress || 'unknown';
+  return req.socket.remoteAddress || "unknown";
 }
 
 export function initWebSocket(wss: WebSocketServer): void {
@@ -65,14 +74,17 @@ export function initWebSocket(wss: WebSocketServer): void {
     }, 60_000);
   }
 
-  wss.on('connection', (ws: AuthenticatedWebSocket, req: IncomingMessage) => {
+  wss.on("connection", (ws: AuthenticatedWebSocket, req: IncomingMessage) => {
     ws.isAlive = true;
 
-    if (process.env.NODE_ENV === 'development' && process.env.WS_DEV_FORCE_CLOSE_CODE) {
+    if (
+      process.env.NODE_ENV === "development" &&
+      process.env.WS_DEV_FORCE_CLOSE_CODE
+    ) {
       const forceCode = parseInt(process.env.WS_DEV_FORCE_CLOSE_CODE, 10);
       if (!Number.isNaN(forceCode)) {
         console.warn(`[DEV] Forcing connection close with code: ${forceCode}`);
-        ws.close(forceCode, 'DEV_FORCE_CLOSE');
+        ws.close(forceCode, "DEV_FORCE_CLOSE");
         ws.terminate();
         return;
       }
@@ -85,7 +97,7 @@ export function initWebSocket(wss: WebSocketServer): void {
     const validTimestamps = timestamps.filter((t) => now - t < 60_000);
 
     if (validTimestamps.length >= 10) {
-      ws.close(4006, 'Rate limit exceeded');
+      ws.close(4006, "Rate limit exceeded");
       ws.terminate();
       return;
     }
@@ -94,26 +106,26 @@ export function initWebSocket(wss: WebSocketServer): void {
     connectionRateLimits.set(ip, validTimestamps);
 
     if (IS_PROD) {
-      const origin = (req.headers.origin as string | undefined) || '';
+      const origin = (req.headers.origin as string | undefined) || "";
       if (!isOriginAllowed(origin, ORIGIN_ALLOWLIST)) {
-        ws.close(4007, 'Origin not allowed');
+        ws.close(4007, "Origin not allowed");
         ws.terminate();
         return;
       }
     }
 
     // Sec-WebSocket-Protocol: expect "lume" plus "auth.<token>"
-    const protocols = req.headers['sec-websocket-protocol'];
+    const protocols = req.headers["sec-websocket-protocol"];
 
     let token: string | undefined;
     let hasLumeProtocol = false;
 
     if (protocols) {
-      const parts = protocols.split(',').map((p) => p.trim());
+      const parts = protocols.split(",").map((p) => p.trim());
       for (const part of parts) {
-        if (part === 'lume') {
+        if (part === "lume") {
           hasLumeProtocol = true;
-        } else if (part.startsWith('auth.')) {
+        } else if (part.startsWith("auth.")) {
           token = part.slice(5);
         }
       }
@@ -122,29 +134,32 @@ export function initWebSocket(wss: WebSocketServer): void {
     const abort = (code: number, reason: string) => {
       ws.close(code, reason);
       setTimeout(() => {
-        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CLOSING) {
+        if (
+          ws.readyState === WebSocket.OPEN ||
+          ws.readyState === WebSocket.CLOSING
+        ) {
           ws.terminate();
         }
       }, 1000);
     };
 
     if (!hasLumeProtocol) {
-      return abort(4002, 'Missing protocol marker');
+      return abort(4002, "Missing protocol marker");
     }
 
     if (!token) {
-      return abort(4001, 'Missing auth token');
+      return abort(4001, "Missing auth token");
     }
 
     try {
       const decoded = jwt.verify(token, process.env.WS_JWT_SECRET as string, {
-        audience: 'lume-ws',
-        issuer: 'lume',
-        algorithms: ['HS256'],
+        audience: "lume-ws",
+        issuer: "lume",
+        algorithms: ["HS256"],
       }) as jwt.JwtPayload;
 
-      if (!decoded.sub || typeof decoded.sub !== 'string') {
-        throw new Error('No subject in token');
+      if (!decoded.sub || typeof decoded.sub !== "string") {
+        throw new Error("No subject in token");
       }
 
       const userId = decoded.sub;
@@ -152,36 +167,36 @@ export function initWebSocket(wss: WebSocketServer): void {
 
       const user = database.getUserById(userId);
       if (!user) {
-        return abort(4002, 'User not found');
+        return abort(4002, "User not found");
       }
 
       addConnection(userId, ws);
       database.touchLastSeen(userId);
     } catch (error) {
       if (error instanceof jwt.TokenExpiredError) {
-        return abort(4003, 'Token expired');
+        return abort(4003, "Token expired");
       }
-      return abort(4002, 'Invalid token');
+      return abort(4002, "Invalid token");
     }
 
-    ws.on('pong', () => {
+    ws.on("pong", () => {
       ws.isAlive = true;
     });
 
-    ws.on('message', (data: Buffer) => {
+    ws.on("message", (data: Buffer) => {
       try {
         if (ws.readyState !== WebSocket.OPEN) return;
 
         const message = JSON.parse(data.toString()) as WSMessage;
 
         switch (message.type) {
-          case 'ping':
-            ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
+          case "ping":
+            ws.send(JSON.stringify({ type: "pong", timestamp: Date.now() }));
             break;
-          case 'typing':
+          case "typing":
             if (
-              typeof (message as TypingMessage).recipientId === 'string'
-              && typeof (message as TypingMessage).isTyping === 'boolean'
+              typeof (message as TypingMessage).recipientId === "string" &&
+              typeof (message as TypingMessage).isTyping === "boolean"
             ) {
               handleTyping(ws.userId, message as TypingMessage);
             }
@@ -190,19 +205,19 @@ export function initWebSocket(wss: WebSocketServer): void {
             break;
         }
       } catch (error) {
-        console.error('WS parse error:', error);
+        console.error("WS parse error:", error);
       }
     });
 
-    ws.on('close', () => {
+    ws.on("close", () => {
       if (ws.userId) {
         removeConnection(ws.userId, ws);
         database.touchLastSeen(ws.userId);
       }
     });
 
-    ws.on('error', (error) => {
-      console.error('WS error:', error);
+    ws.on("error", (error) => {
+      console.error("WS error:", error);
     });
   });
 
@@ -218,7 +233,7 @@ export function initWebSocket(wss: WebSocketServer): void {
     });
   }, 30_000);
 
-  wss.on('close', () => {
+  wss.on("close", () => {
     clearInterval(interval);
     if (rateLimitCleanupInterval) {
       clearInterval(rateLimitCleanupInterval);
@@ -245,7 +260,7 @@ function handleTyping(senderId: string, message: TypingMessage): void {
   typingRateLimits.set(key, { lastAt: now, state: message.isTyping });
 
   broadcastToUser(message.recipientId, {
-    type: 'typing',
+    type: "typing",
     senderId,
     senderUsername: sender.username,
     isTyping: message.isTyping,
@@ -263,14 +278,21 @@ function addConnection(userId: string, ws: WebSocket): void {
     const oldest = connections.values().next().value;
     if (oldest) {
       try {
-        oldest.close(4005, 'Too many connections');
+        oldest.close(4005, "Too many connections");
         setTimeout(() => {
-          if (oldest.readyState === WebSocket.OPEN || oldest.readyState === WebSocket.CLOSING) {
-            try { oldest.terminate(); } catch { /* ignore */ }
+          if (
+            oldest.readyState === WebSocket.OPEN ||
+            oldest.readyState === WebSocket.CLOSING
+          ) {
+            try {
+              oldest.terminate();
+            } catch {
+              /* ignore */
+            }
           }
         }, 1000);
       } catch (e) {
-        console.error('Error closing old socket:', e);
+        console.error("Error closing old socket:", e);
       }
       connections.delete(oldest);
     }

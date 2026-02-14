@@ -1,16 +1,19 @@
-import { decodeBase64 } from 'tweetnacl-util';
+import { decodeBase64 } from "tweetnacl-util";
 
 const USERNAME_REGEX = /^[a-zA-Z0-9_]{3,32}$/;
 const UUID_LIKE_REGEX = /^[a-fA-F0-9-]{8,128}$/;
 
 export function isValidUsername(username: unknown): username is string {
-  if (typeof username !== 'string') return false;
+  if (typeof username !== "string") return false;
   const normalized = username.trim();
   return USERNAME_REGEX.test(normalized);
 }
 
-export function isValidBase64Key(key: unknown, expectedLength = 32): key is string {
-  if (typeof key !== 'string') return false;
+export function isValidBase64Key(
+  key: unknown,
+  expectedLength = 32,
+): key is string {
+  if (typeof key !== "string") return false;
   try {
     const decoded = decodeBase64(key);
     return decoded.length === expectedLength;
@@ -20,7 +23,7 @@ export function isValidBase64Key(key: unknown, expectedLength = 32): key is stri
 }
 
 export function isValidSignature(signature: unknown): signature is string {
-  if (typeof signature !== 'string') return false;
+  if (typeof signature !== "string") return false;
   try {
     return decodeBase64(signature).length === 64;
   } catch {
@@ -29,12 +32,12 @@ export function isValidSignature(signature: unknown): signature is string {
 }
 
 export function isValidUuidLike(value: unknown): value is string {
-  if (typeof value !== 'string') return false;
+  if (typeof value !== "string") return false;
   return UUID_LIKE_REGEX.test(value.trim());
 }
 
 export function isValidPrekeys(
-  prekeys: unknown
+  prekeys: unknown,
 ): prekeys is Array<{ id: string; publicKey: string }> {
   if (!Array.isArray(prekeys) || prekeys.length > 500) {
     return false;
@@ -42,10 +45,14 @@ export function isValidPrekeys(
 
   const seen = new Set<string>();
   for (const item of prekeys) {
-    if (!item || typeof item !== 'object') return false;
+    if (!item || typeof item !== "object") return false;
 
     const candidate = item as { id?: unknown; publicKey?: unknown };
-    if (typeof candidate.id !== 'string' || candidate.id.trim().length === 0 || candidate.id.length > 128) {
+    if (
+      typeof candidate.id !== "string" ||
+      candidate.id.trim().length === 0 ||
+      candidate.id.length > 128
+    ) {
       return false;
     }
     if (seen.has(candidate.id)) return false;

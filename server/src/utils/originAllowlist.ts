@@ -1,5 +1,5 @@
 ﻿function normalizeRaw(value: string): string {
-  return value.trim().replace(/\/+$/, '');
+  return value.trim().replace(/\/+$/, "");
 }
 
 function toOrigin(value: string): string | null {
@@ -17,7 +17,9 @@ function toHost(value: string): string | null {
   const trimmed = normalizeRaw(value);
   if (!trimmed) return null;
 
-  const withScheme = /^(https?:)?\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  const withScheme = /^(https?:)?\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
   try {
     const url = new URL(withScheme);
     return url.host.toLowerCase();
@@ -34,7 +36,7 @@ export interface OriginAllowlist {
 
 export function buildOriginAllowlist(source: string): OriginAllowlist {
   const raw = source
-    .split(',')
+    .split(",")
     .map((s) => normalizeRaw(s))
     .filter(Boolean);
 
@@ -55,7 +57,10 @@ export function buildOriginAllowlist(source: string): OriginAllowlist {
   return { raw, allowedOrigins, allowedHosts };
 }
 
-export function isOriginAllowed(origin: string | undefined, allowlist: OriginAllowlist): boolean {
+export function isOriginAllowed(
+  origin: string | undefined,
+  allowlist: OriginAllowlist,
+): boolean {
   if (!origin) return false;
 
   const normalizedOrigin = toOrigin(origin);

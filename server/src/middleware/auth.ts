@@ -1,143 +1,150 @@
-
-import { Request, Response, NextFunction } from 'express';
-import nacl from 'tweetnacl';
-import { decodeBase64 } from 'tweetnacl-util';
-import { createHash } from 'crypto';
-import database from '../db/database';
+import { Request, Response, NextFunction } from "express";
+import nacl from "tweetnacl";
+import { decodeBase64 } from "tweetnacl-util";
+import { createHash } from "crypto";
+import database from "../db/database";
 
 function getCanonicalApiPath(req: Request): string {
-    const withoutQuery = req.originalUrl.split('?')[0];
-    if (withoutQuery.startsWith('/api/')) {
-        return withoutQuery.slice('/api'.length);
-    }
-    if (withoutQuery === '/api') {
-        return '/';
-    }
-    return withoutQuery;
+  const withoutQuery = req.originalUrl.split("?")[0];
+  if (withoutQuery.startsWith("/api/")) {
+    return withoutQuery.slice("/api".length);
+  }
+  if (withoutQuery === "/api") {
+    return "/";
+  }
+  return withoutQuery;
 }
 
-export const requireSignature = (req: Request, res: Response, next: NextFunction) => {
-    try {
-        const identityKey = req.headers['x-lume-identity-key'] as string;
-        const signature = req.headers['x-lume-signature'] as string;
-        const timestamp = req.headers['x-lume-timestamp'] as string;
-        const nonce = req.headers['x-lume-nonce'] as string | undefined;
-        const signedPath = req.headers['x-lume-path'] as string | undefined;
-        const requestMethod = req.method.toUpperCase();
-        const requestPath = getCanonicalApiPath(req);
+export const requireSignature = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const identityKey = req.headers["x-lume-identity-key"] as string;
+    const signature = req.headers["x-lume-signature"] as string;
+    const timestamp = req.headers["x-lume-timestamp"] as string;
+    const nonce = req.headers["x-lume-nonce"] as string | undefined;
+    const signedPath = req.headers["x-lume-path"] as string | undefined;
+    const requestMethod = req.method.toUpperCase();
+    const requestPath = getCanonicalApiPath(req);
 
-        if (!identityKey || !signature || !timestamp || !nonce || !signedPath) {
-            res.status(401).json({ error: 'Missing authentication headers' });
-            return;
-        }
-        if (signedPath.length > 256 || !signedPath.startsWith('/')) {
-            res.status(401).json({ error: 'Invalid signed path' });
-            return;
-        }
-        if (signedPath !== requestPath) {
-            res.status(401).json({ error: 'Signed path mismatch' });
-            return;
-        }
-
-        let publicKeyBytes: Uint8Array;
-        let signatureBytes: Uint8Array;
-        try {
-            publicKeyBytes = decodeBase64(identityKey);
-            signatureBytes = decodeBase64(signature);
-        } catch {
-            res.status(401).json({ error: 'Invalid auth header format' });
-            return;
-        }
-        if (publicKeyBytes.length !== 32 || signatureBytes.length !== 64) {
-            res.status(401).json({ error: 'Invalid auth header length' });
-            return;
-        }
-
-        // Prevent replay attacks (valid for 1 minute)
-        const now = Date.now();
-        let reqTime = parseInt(timestamp, 10);
-        if (Number.isNaN(reqTime)) {
-            res.status(401).json({ error: 'Invalid timestamp' });
-            return;
-        }
-        // Accept seconds or milliseconds
-        if (reqTime < 1_000_000_000_000) {
-            reqTime *= 1000;
-        }
-        if (Math.abs(now - reqTime) > 60000) {
-            res.status(401).json({ error: 'Request expired' });
-            return;
-        }
-
-        // Verify user exists and key matches
-        // Ideally we check if the identityKey belongs to the claimed userId in the body/params
-        // But the middleware is generic. Let's verify the signature first.
-
-        // Message = timestamp + nonce + method + api path + raw JSON body.
-        // Accept both "" and "{}" for empty bodies to be tolerant of empty payload clients.
-        const rawBody = (req as Request & { rawBody?: string }).rawBody;
-        const bodyCandidates: string[] = [];
-
-        if (rawBody !== undefined) {
-            if (rawBody.length > 0) {
-                bodyCandidates.push(rawBody);
-            } else {
-                bodyCandidates.push('');
-                bodyCandidates.push('{}');
-            }
-        } else if (req.body && Object.keys(req.body).length > 0) {
-            bodyCandidates.push(JSON.stringify(req.body));
-        } else {
-            bodyCandidates.push('');
-            bodyCandidates.push('{}');
-        }
-
-        const isValid = bodyCandidates.some((body) => {
-            const message = `${timestamp}.${nonce}.${requestMethod}.${signedPath}.${body}`;
-            const messageBytes = new TextEncoder().encode(message);
-            return nacl.sign.detached.verify(messageBytes, signatureBytes, publicKeyBytes);
-        });
-
-        if (!isValid) {
-            res.status(403).json({ error: 'Invalid signature' });
-            return;
-        }
-
-        const replayHash = createHash('sha256')
-            .update(identityKey)
-            .update('|')
-            .update(timestamp)
-            .update('|')
-            .update(signature)
-            .update('|')
-            .update(nonce)
-            .update('|')
-            .update(requestMethod)
-            .update('|')
-            .update(signedPath)
-            .digest('hex');
-
-        if (!database.rememberRequestSignature(replayHash, identityKey)) {
-            res.status(409).json({ error: 'Duplicate request' });
-            return;
-        }
-
-        // Pass identity key to next handler if needed
-        req.user = { identityKey };
-        next();
-    } catch (error) {
-        console.error('Auth middleware error:', error);
-        res.status(500).json({ error: 'Internal auth error' });
+    if (!identityKey || !signature || !timestamp || !nonce || !signedPath) {
+      res.status(401).json({ error: "Missing authentication headers" });
+      return;
     }
+    if (signedPath.length > 256 || !signedPath.startsWith("/")) {
+      res.status(401).json({ error: "Invalid signed path" });
+      return;
+    }
+    if (signedPath !== requestPath) {
+      res.status(401).json({ error: "Signed path mismatch" });
+      return;
+    }
+
+    let publicKeyBytes: Uint8Array;
+    let signatureBytes: Uint8Array;
+    try {
+      publicKeyBytes = decodeBase64(identityKey);
+      signatureBytes = decodeBase64(signature);
+    } catch {
+      res.status(401).json({ error: "Invalid auth header format" });
+      return;
+    }
+    if (publicKeyBytes.length !== 32 || signatureBytes.length !== 64) {
+      res.status(401).json({ error: "Invalid auth header length" });
+      return;
+    }
+
+    // Prevent replay attacks (valid for 1 minute)
+    const now = Date.now();
+    let reqTime = parseInt(timestamp, 10);
+    if (Number.isNaN(reqTime)) {
+      res.status(401).json({ error: "Invalid timestamp" });
+      return;
+    }
+    // Accept seconds or milliseconds
+    if (reqTime < 1_000_000_000_000) {
+      reqTime *= 1000;
+    }
+    if (Math.abs(now - reqTime) > 60000) {
+      res.status(401).json({ error: "Request expired" });
+      return;
+    }
+
+    // Verify user exists and key matches
+    // Ideally we check if the identityKey belongs to the claimed userId in the body/params
+    // But the middleware is generic. Let's verify the signature first.
+
+    // Message = timestamp + nonce + method + api path + raw JSON body.
+    // Accept both "" and "{}" for empty bodies to be tolerant of empty payload clients.
+    const rawBody = (req as Request & { rawBody?: string }).rawBody;
+    const bodyCandidates: string[] = [];
+
+    if (rawBody !== undefined) {
+      if (rawBody.length > 0) {
+        bodyCandidates.push(rawBody);
+      } else {
+        bodyCandidates.push("");
+        bodyCandidates.push("{}");
+      }
+    } else if (req.body && Object.keys(req.body).length > 0) {
+      bodyCandidates.push(JSON.stringify(req.body));
+    } else {
+      bodyCandidates.push("");
+      bodyCandidates.push("{}");
+    }
+
+    const isValid = bodyCandidates.some((body) => {
+      const message = `${timestamp}.${nonce}.${requestMethod}.${signedPath}.${body}`;
+      const messageBytes = new TextEncoder().encode(message);
+      return nacl.sign.detached.verify(
+        messageBytes,
+        signatureBytes,
+        publicKeyBytes,
+      );
+    });
+
+    if (!isValid) {
+      res.status(403).json({ error: "Invalid signature" });
+      return;
+    }
+
+    const replayHash = createHash("sha256")
+      .update(identityKey)
+      .update("|")
+      .update(timestamp)
+      .update("|")
+      .update(signature)
+      .update("|")
+      .update(nonce)
+      .update("|")
+      .update(requestMethod)
+      .update("|")
+      .update(signedPath)
+      .digest("hex");
+
+    if (!database.rememberRequestSignature(replayHash, identityKey)) {
+      res.status(409).json({ error: "Duplicate request" });
+      return;
+    }
+
+    // Pass identity key to next handler if needed
+    req.user = { identityKey };
+    next();
+  } catch (error) {
+    console.error("Auth middleware error:", error);
+    res.status(500).json({ error: "Internal auth error" });
+  }
 };
 
 // Extend Express Request type
 declare global {
-    namespace Express {
-        interface Request {
-            user?: {
-                identityKey: string;
-            };
-        }
+  namespace Express {
+    interface Request {
+      user?: {
+        identityKey: string;
+      };
     }
+  }
 }
