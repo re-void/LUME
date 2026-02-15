@@ -325,7 +325,10 @@ export const database = {
         db.prepare(`SELECT * FROM users WHERE id IN (${placeholders})`),
       );
     }
-    return getUsersByIdsCache.get(key)!.all(...userIds) as User[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (getUsersByIdsCache.get(key)!.all as (...p: any[]) => unknown[])(
+      ...userIds,
+    ) as User[];
   },
 
   getMessageById(messageId: string): PendingMessage | undefined {

@@ -75,7 +75,7 @@ describe('integration: auth + messages flow', () => {
     expect([201, 409]).toContain(res.status);
     const bobId = res.body.id || res.body?.userId || res.body?.message || 'bob-id';
 
-    const bundleHeaders = signHeaders('POST', '/auth/bundle', { username: bob.username }, bob.idKey);
+    const bundleHeaders = signHeaders('POST', '/auth/bundle', { username: bob.username }, alice.idKey);
     res = await request(app).post('/api/auth/bundle').set(bundleHeaders).send({ username: bob.username });
     expect(res.status).toBe(200);
 
