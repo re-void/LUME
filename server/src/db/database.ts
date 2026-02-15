@@ -92,8 +92,12 @@ try {
   db.exec(
     `UPDATE users SET exchange_identity_key = signed_prekey WHERE exchange_identity_key IS NULL`,
   );
-} catch {
-  // Keep running - new DBs will still be created correctly above.
+} catch (migrationError) {
+  // Acceptable: new DBs will still be created correctly above.
+  // Log for debugging if the migration query itself is broken.
+  if (process.env.LOG_SECURITY === "1") {
+    console.warn("[db] Migration skipped:", migrationError);
+  }
 }
 
 // ==================== Prepared Statements ====================
@@ -206,6 +210,9 @@ export interface User {
   last_seen: number | null;
 }
 
+// Cache for getUsersByIds prepared statements keyed by number of IDs.
+const getUsersByIdsCache = new Map<number, ReturnType<typeof db.prepare>>();
+
 export interface PendingMessage {
   id: string;
   sender_id: string;
@@ -309,11 +316,16 @@ export const database = {
 
   getUsersByIds(userIds: string[]): User[] {
     if (userIds.length === 0) return [];
-    const placeholders = userIds.map(() => "?").join(", ");
-    const stmt = db.prepare(
-      `SELECT * FROM users WHERE id IN (${placeholders})`,
-    );
-    return stmt.all(...userIds) as User[];
+    // Cache prepared statements by arity to avoid re-preparing on every call.
+    const key = userIds.length;
+    if (!getUsersByIdsCache.has(key)) {
+      const placeholders = userIds.map(() => "?").join(", ");
+      getUsersByIdsCache.set(
+        key,
+        db.prepare(`SELECT * FROM users WHERE id IN (${placeholders})`),
+      );
+    }
+    return getUsersByIdsCache.get(key)!.all(...userIds) as User[];
   },
 
   getMessageById(messageId: string): PendingMessage | undefined {

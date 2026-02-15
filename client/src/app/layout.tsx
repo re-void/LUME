@@ -1,30 +1,30 @@
-import type { Metadata, Viewport } from 'next';
-import './globals.css';
-import StatusBanner from '@/components/StatusBanner';
-import ErrorBoundary from '@/components/ErrorBoundary';
-import OnlineStatus from '@/components/OnlineStatus';
+import type { Metadata, Viewport } from "next";
+import "./globals.css";
+import StatusBanner from "@/components/StatusBanner";
+import ErrorBoundary from "@/components/ErrorBoundary";
+import OnlineStatus from "@/components/OnlineStatus";
 
 export const metadata: Metadata = {
-  title: 'L U M E',
-  applicationName: 'L U M E',
-  description: 'L U M E - private messages and privacy by default',
-  keywords: ['messenger', 'secure', 'encrypted', 'anonymous', 'e2ee', 'lume'],
-  authors: [{ name: 'Lume Team' }],
+  title: "L U M E",
+  applicationName: "L U M E",
+  description: "L U M E - private messages and privacy by default",
+  keywords: ["messenger", "secure", "encrypted", "anonymous", "e2ee", "lume"],
+  authors: [{ name: "Lume Team" }],
   icons: {
-    icon: '/lume-icon.png',
-    shortcut: '/lume-icon.png',
-    apple: '/lume-icon.png',
+    icon: "/lume-icon.png",
+    shortcut: "/lume-icon.png",
+    apple: "/lume-icon.png",
   },
 };
 
 export const viewport: Viewport = {
-  width: 'device-width',
+  width: "device-width",
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#f5f5f5' },
-    { media: '(prefers-color-scheme: dark)', color: '#050505' },
+    { media: "(prefers-color-scheme: light)", color: "#f5f5f5" },
+    { media: "(prefers-color-scheme: dark)", color: "#050505" },
   ],
 };
 
@@ -34,7 +34,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ru" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <body className="antialiased min-h-screen">
         <script
           // Set theme before React hydration to avoid a flash.

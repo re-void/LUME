@@ -276,12 +276,30 @@ router.get(
   },
 );
 
+// Prekey bundle rate limit — tighter per-requester limit to prevent prekey exhaustion.
+const bundleRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10, // max 10 bundle fetches per minute per requester
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request): string => {
+    const identityKey = req.user?.identityKey;
+    if (identityKey) {
+      const user = database.getUserByIdentityKey(identityKey);
+      if (user) {
+        return `bundle:${user.id}`;
+      }
+    }
+    return `bundle:ip:${req.ip || "127.0.0.1"}`;
+  },
+});
+
 // POST /auth/bundle
 // Returns a prekey bundle and consumes one one-time prekey (if available).
 router.post(
   "/bundle",
   requireSignature,
-  keysRateLimit,
+  bundleRateLimit,
   (req: Request, res: Response) => {
     try {
       const body = req.body as { username?: string };
@@ -292,9 +310,19 @@ router.post(
         return;
       }
 
+      // Prevent requesting your own bundle (no reason to consume your own prekeys).
+      const requester = req.user?.identityKey
+        ? database.getUserByIdentityKey(req.user.identityKey)
+        : undefined;
+
       const user = database.getUserByUsername(username);
       if (!user) {
         res.status(404).json({ error: "User not found" });
+        return;
+      }
+
+      if (requester && requester.id === user.id) {
+        res.status(400).json({ error: "Cannot request your own bundle" });
         return;
       }
 
@@ -317,6 +345,11 @@ router.post(
       }
 
       res.json(response);
+      audit("bundle_consume", {
+        requesterId: requester?.id,
+        targetId: user.id,
+        hadOPK: !!oneTimePrekey,
+      });
     } catch (error) {
       console.error("Get bundle error:", error);
       res.status(500).json({ error: "Internal server error" });
