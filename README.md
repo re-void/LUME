@@ -55,5 +55,3 @@ Client:
 - GitHub repo created (`rekonov/LUME`, private)
 - CI/CD: `ci.yml` (6 jobs), `deploy-server.yml`, `deploy-client.yml`, `dependabot.yml`
 - Docker: `server/Dockerfile`, `server/fly.toml`
-
----
