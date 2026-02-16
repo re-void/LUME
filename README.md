@@ -1,5 +1,13 @@
 ## Changelog
 
+### `11f02a7` — 2026-02-16 (fix)
+**fix: infinite loop (Maximum update depth exceeded) on chat open**
+
+- `client/src/stores/index.ts` — `markAsRead()` bail-out: skip state update when `unreadCount` already 0 (prevents Zustand re-render loop)
+- `client/src/app/chat/[id]/page.tsx` — removed reactive `chat` object from `useEffect` dep array; read current chat via `useChatsStore.getState()` instead (breaks render→effect→setState→render cycle)
+
+---
+
 ### `dcd2cfe` — 2026-02-15 (feat + security)
 **feat: settings page, security hardening, read receipts UI, delete messages/contacts**
 
