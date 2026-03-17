@@ -1,0 +1,51 @@
+/**
+ * Shared hook: panic wipe logic.
+ * Eliminates copy-paste between chats/page.tsx and chat/[id]/page.tsx.
+ */
+
+import { useState, useCallback } from "react";
+import {
+  useAuthStore,
+  useUIStore,
+  useContactsStore,
+  useChatsStore,
+  useSessionsStore,
+  useTypingStore,
+  useBlockedStore,
+} from "@/stores";
+import { wsClient } from "@/lib/websocket";
+import { panicWipe } from "@/crypto/storage";
+
+export function usePanic() {
+  const { isPanicMode, setPanicMode } = useUIStore();
+
+  const [showPanicConfirm, setShowPanicConfirm] = useState(false);
+
+  const executePanic = useCallback(async () => {
+    setPanicMode(true);
+    wsClient.disconnect();
+    await panicWipe();
+
+    // Reset all Zustand stores (clearAuth zeroes key material)
+    useAuthStore.getState().clearAuth();
+    useContactsStore.getState().setContacts([]);
+    useChatsStore.getState().setChats([]);
+    useSessionsStore.getState().setSessions({});
+    useTypingStore.getState().clearAll();
+    useBlockedStore.getState().setBlockedIds([]);
+    useUIStore.getState().setPanicMode(false);
+    useUIStore.getState().setShowHiddenChats(false);
+    useUIStore.getState().clearCryptoBanner();
+
+    // Use location.replace to clear bfcache (back-forward cache)
+    // so pressing "Back" won't reveal any sensitive UI state
+    window.location.replace("/");
+  }, [setPanicMode]);
+
+  return {
+    isPanicMode,
+    showPanicConfirm,
+    setShowPanicConfirm,
+    executePanic,
+  };
+}
