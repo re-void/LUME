@@ -122,7 +122,7 @@ export default function UnlockPage() {
         identity,
       );
       if (spkResult.error) {
-        console.warn("SPK rotation issue during unlock:", spkResult.error);
+        if (process.env.NODE_ENV !== 'production') console.warn("SPK rotation issue during unlock:", spkResult.error);
       }
 
       setAuth(resolvedUserId, resolvedUsername, identity, masterKey);
