@@ -18,13 +18,13 @@ export default function ServiceWorkerRegistration() {
               navigator.serviceWorker.controller
             ) {
               // New version available — reload on next navigation
-              console.log("[SW] New version activated.");
+              if (process.env.NODE_ENV !== 'production') console.log("[SW] New version activated.");
             }
           });
         });
       })
       .catch((err) => {
-        console.warn("[SW] Registration failed:", err);
+        if (process.env.NODE_ENV !== 'production') console.warn("[SW] Registration failed:", err);
       });
   }, []);
 

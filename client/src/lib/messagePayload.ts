@@ -62,7 +62,6 @@ export function encodeMessagePayload(
         ciphertext: encrypted.ciphertext,
         nonce: encrypted.nonce,
         timestamp,
-        selfDestruct: selfDestruct ?? null,
     };
 
     return JSON.stringify(envelope);

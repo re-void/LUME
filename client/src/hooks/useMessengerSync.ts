@@ -97,7 +97,7 @@ async function replenishPrekeys(
 
   const { error } = await authApi.uploadPrekeys(userId, uploadPayload, identityKeys);
   if (error) {
-    console.warn('Failed to upload replenished prekeys, skipping local save:', error);
+    if (process.env.NODE_ENV !== 'production') console.warn('Failed to upload replenished prekeys, skipping local save:', error);
     return;
   }
 

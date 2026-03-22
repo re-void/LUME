@@ -53,14 +53,14 @@ class WebSocketClient {
             try {
                 this.ws = new WebSocket(WS_URL, ['lume', 'auth.' + token]);
             } catch (e) {
-                console.warn('WebSocket creation failed, will retry:', e);
+                if (process.env.NODE_ENV !== 'production') console.warn('WebSocket creation failed, will retry:', e);
                 this.attemptReconnect();
                 resolve();
                 return;
             }
 
             this.ws.onopen = () => {
-                console.log('WebSocket connected');
+                if (process.env.NODE_ENV !== 'production') console.log('WebSocket connected');
                 useUIStore.getState().setWsStatus('connected');
                 this.startPing();
                 this.reconnectAttempts = 0;
@@ -84,13 +84,13 @@ class WebSocketClient {
                     return;
                 }
 
-                console.log('WebSocket disconnected', event.code, event.reason);
+                if (process.env.NODE_ENV !== 'production') console.log('WebSocket disconnected', event.code, event.reason);
                 this.stopPing();
 
                 // Map close codes to status/actions
                 switch (event.code) {
                     case CloseCodes.EXPIRED_AUTH: // 4003
-                        console.warn('WS Token Expired. Requesting refresh...');
+                        if (process.env.NODE_ENV !== 'production') console.warn('WS Token Expired. Requesting refresh...');
                         // Limit: 5 attempts per 10 minutes
                         const now = Date.now();
                         if (now - this.lastRefreshTime > 10 * 60 * 1000) {
@@ -125,7 +125,7 @@ class WebSocketClient {
                         return;
 
                     case CloseCodes.RATE_LIMITED: // 4006
-                        console.warn('WS Rate Limited');
+                        if (process.env.NODE_ENV !== 'production') console.warn('WS Rate Limited');
                         useUIStore.getState().setWsStatus('rate_limited');
                         this.attemptReconnect(60000); // 60s forced delay
                         return;
@@ -139,7 +139,7 @@ class WebSocketClient {
             };
 
             this.ws.onerror = () => {
-                console.warn('WebSocket connection error');
+                if (process.env.NODE_ENV !== 'production') console.warn('WebSocket connection error');
                 // onerror usually followed by onclose
             };
         });
@@ -197,7 +197,7 @@ class WebSocketClient {
                 break;
 
             default:
-                console.warn('Unknown WS message type:', type);
+                if (process.env.NODE_ENV !== 'production') console.warn('Unknown WS message type:', type);
         }
         this.emit(type, data);
     }
@@ -281,7 +281,7 @@ class WebSocketClient {
      */
     private attemptReconnect(forcedDelay?: number): void {
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-            console.warn(`Max reconnect attempts (${this.maxReconnectAttempts}) reached. Giving up.`);
+            if (process.env.NODE_ENV !== 'production') console.warn(`Max reconnect attempts (${this.maxReconnectAttempts}) reached. Giving up.`);
             useUIStore.getState().setWsStatus('disconnected');
             return;
         }
@@ -294,7 +294,7 @@ class WebSocketClient {
             delay = Math.min(30000, this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1));
         }
 
-        console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+        if (process.env.NODE_ENV !== 'production') console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
 
         this.clearReconnectTimer();
         this.reconnectTimer = setTimeout(() => {

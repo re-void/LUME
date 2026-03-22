@@ -101,7 +101,7 @@ export default function RecoverPage() {
         identity
       );
       if (rotateError) {
-        console.warn('Signed prekey rotation skipped during recovery:', rotateError);
+        if (process.env.NODE_ENV !== 'production') console.warn('Signed prekey rotation skipped during recovery:', rotateError);
       }
 
       try {
@@ -114,7 +114,7 @@ export default function RecoverPage() {
           identity
         );
       } catch (uploadError) {
-        console.warn('Prekey refill failed after recovery:', uploadError);
+        if (process.env.NODE_ENV !== 'production') console.warn('Prekey refill failed after recovery:', uploadError);
       }
 
       setAuth(data.id, data.username, identity, masterKey);

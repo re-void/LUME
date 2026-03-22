@@ -8,7 +8,8 @@
 ![TweetNaCl](https://img.shields.io/badge/TweetNaCl-E2E%20Encryption-6B21A8?style=flat-square)
 ![WebSocket](https://img.shields.io/badge/WebSocket-real--time-22C55E?style=flat-square)
 ![SQLite](https://img.shields.io/badge/SQLite-better--sqlite3-003B57?style=flat-square&logo=sqlite)
-![License](https://img.shields.io/badge/license-All%20rights%20reserved-red?style=flat-square)
+![License](https://img.shields.io/github/license/umaiw/LUME?style=flat-square)
+![CI](https://github.com/umaiw/LUME/actions/workflows/ci.yml/badge.svg?branch=dev)
 
 **End-to-end encrypted messaging.** Double Ratchet protocol, hidden chats, self-destruct, read receipts — all in the browser.
 

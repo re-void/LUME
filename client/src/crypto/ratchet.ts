@@ -131,8 +131,12 @@ export function x3dhInitiate(
         );
     }
 
-    // Генерируем эфемерный ключ
-    const ephemeralKeyPair = generateExchangeKeyPair();
+    // Генерируем эфемерный ключ — keep raw Uint8Array for zeroing after use
+    const rawEphemeral = nacl.box.keyPair();
+    const ephemeralKeyPair: KeyPair = {
+        publicKey: encodeBase64(rawEphemeral.publicKey),
+        secretKey: encodeBase64(rawEphemeral.secretKey),
+    };
 
     // DH1: sender identity key, recipient signed prekey
     const dh1 = dh(senderIdentityKeyPair, recipientBundle.signedPreKey);
@@ -166,6 +170,11 @@ export function x3dhInitiate(
     zeroBytes(dh1); zeroBytes(dh2); zeroBytes(dh3);
     if (dh4) zeroBytes(dh4);
     zeroBytes(combined);
+
+    // Zero the raw ephemeral secret key (Uint8Array) to prevent lingering in memory.
+    // The base64 string in ephemeralKeyPair.secretKey is immutable in JS and will be GC'd,
+    // but the raw Uint8Array is the actual key material we can actively wipe.
+    zeroBytes(rawEphemeral.secretKey);
 
     return {
         sharedSecret,
