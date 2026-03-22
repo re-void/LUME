@@ -297,12 +297,23 @@ export async function saveIdentityKeys(
 }
 
 /**
- * Save PIN hash separately (called at setup / unlock time).
+ * Save PIN verification token (called at setup / unlock time).
+ * Derives a key via PBKDF2 (600K iterations) and encrypts a known sentinel.
+ * Verification: derive key from candidate PIN, try to decrypt. Success = correct PIN.
  */
 export async function savePinHash(pin: string): Promise<void> {
-  const pinBytes = stringToUint8Array(pin);
-  const pinHash = nacl.hash(pinBytes);
-  await set(STORAGE_KEYS.PIN_HASH, encodeBase64(pinHash));
+  const salt = nacl.randomBytes(16);
+  const key = await deriveKeyFromPinWithIterations(pin, salt, 600_000);
+  const nonce = nacl.randomBytes(nacl.secretbox.nonceLength);
+  const sentinel = stringToUint8Array("LUME_PIN_VERIFY");
+  const ciphertext = nacl.secretbox(sentinel, nonce, key);
+  const token = JSON.stringify({
+    v: 2,
+    salt: encodeBase64(salt),
+    nonce: encodeBase64(nonce),
+    ciphertext: encodeBase64(ciphertext),
+  });
+  await set(STORAGE_KEYS.PIN_HASH, token);
 }
 
 /**

@@ -13,6 +13,7 @@ export interface RatchetEnvelopeV2 {
   ciphertext: string;
   nonce: string;
   timestamp: number;
+  /** @deprecated selfDestruct moved inside encrypted plaintext; kept for backward compat on receive */
   selfDestruct?: number | null;
   x3dh?: X3DHInitPayload;
 }
@@ -30,7 +31,6 @@ export function encodeRatchetEnvelope(params: {
     ciphertext: params.encrypted.ciphertext,
     nonce: params.encrypted.nonce,
     timestamp: params.timestamp,
-    selfDestruct: params.selfDestruct ?? null,
     ...(params.x3dh ? { x3dh: params.x3dh } : {}),
   };
   return JSON.stringify(envelope);

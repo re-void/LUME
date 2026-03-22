@@ -13,7 +13,6 @@ const connectedUsers = new Map<string, Set<WebSocket>>()
 const connectionRateLimits = new Map<string, number[]>() // IP -> timestamps
 const typingRateLimits = new Map<string, { lastAt: number; state: boolean }>()
 const ORIGIN_ALLOWLIST = buildOriginAllowlist(process.env.CLIENT_ORIGIN || 'http://localhost:3000')
-const IS_PROD = process.env.NODE_ENV === 'production'
 
 let rateLimitCleanupInterval: NodeJS.Timeout | null = null
 
@@ -102,7 +101,8 @@ export function initWebSocket(wss: WebSocketServer): void {
     validTimestamps.push(now)
     connectionRateLimits.set(ip, validTimestamps)
 
-    if (IS_PROD) {
+    const skipOriginCheck = process.env.SKIP_ORIGIN_CHECK === '1'
+    if (!skipOriginCheck) {
       const origin = (req.headers.origin as string | undefined) || ''
       if (!isOriginAllowed(origin, ORIGIN_ALLOWLIST)) {
         ws.close(4007, 'Origin not allowed')

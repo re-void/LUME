@@ -1,5 +1,6 @@
 process.env.DB_PATH = ':memory:';
 process.env.WS_JWT_SECRET = 'x'.repeat(40);
+process.env.SKIP_ORIGIN_CHECK = '1';
 
 import { createServer } from 'http';
 import express from 'express';
