@@ -550,7 +550,13 @@ export const database = {
 
   // ── Files ──
 
-  createFile(id: string, uploaderId: string, size: number, mimeHint: string, expiresAt?: number): void {
+  createFile(
+    id: string,
+    uploaderId: string,
+    size: number,
+    mimeHint: string,
+    expiresAt?: number
+  ): void {
     insertFile.run(id, uploaderId, size, mimeHint, expiresAt ?? null)
   },
 

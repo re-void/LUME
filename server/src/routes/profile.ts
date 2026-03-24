@@ -8,7 +8,8 @@ const router = Router()
 const profileLimiter = rateLimit({
   windowMs: 60_000,
   max: 30,
-  keyGenerator: (req: Request) => (req as unknown as { user?: { identityKey: string } }).user?.identityKey || req.ip || 'unknown',
+  keyGenerator: (req: Request) =>
+    (req as unknown as { user?: { identityKey: string } }).user?.identityKey || req.ip || 'unknown',
   standardHeaders: true,
   legacyHeaders: false,
 })
@@ -47,7 +48,7 @@ router.put('/:userId', requireSignature, profileLimiter, (req: Request, res: Res
   // Verify the requester is the user
   const requesterKey = (req as unknown as { user?: { identityKey: string } }).user?.identityKey
   if (requesterKey !== user.identity_key) {
-    res.status(403).json({ error: 'Cannot edit another user\'s profile' })
+    res.status(403).json({ error: "Cannot edit another user's profile" })
     return
   }
 

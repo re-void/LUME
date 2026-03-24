@@ -24,9 +24,7 @@ const groupRateLimit = rateLimit({
 })
 
 function getSignerUser(req: Request) {
-  return req.user?.identityKey
-    ? database.getUserByIdentityKey(req.user.identityKey)
-    : undefined
+  return req.user?.identityKey ? database.getUserByIdentityKey(req.user.identityKey) : undefined
 }
 
 // POST /groups/create
@@ -133,57 +131,65 @@ router.get('/:groupId', requireSignature, (req: Request, res: Response) => {
 })
 
 // POST /groups/:groupId/members — add a member
-router.post('/:groupId/members', requireSignature, groupRateLimit, (req: Request, res: Response) => {
-  try {
-    const groupId = req.params.groupId as string
-    if (!isValidUuidLike(groupId)) {
-      res.status(400).json({ error: 'Invalid groupId' })
-      return
-    }
+router.post(
+  '/:groupId/members',
+  requireSignature,
+  groupRateLimit,
+  (req: Request, res: Response) => {
+    try {
+      const groupId = req.params.groupId as string
+      if (!isValidUuidLike(groupId)) {
+        res.status(400).json({ error: 'Invalid groupId' })
+        return
+      }
 
-    const signer = getSignerUser(req)
-    if (!signer) {
-      res.status(403).json({ error: 'Unauthorized' })
-      return
-    }
+      const signer = getSignerUser(req)
+      if (!signer) {
+        res.status(403).json({ error: 'Unauthorized' })
+        return
+      }
 
-    const group = database.getGroupById(groupId)
-    if (!group) {
-      res.status(404).json({ error: 'Group not found' })
-      return
-    }
+      const group = database.getGroupById(groupId)
+      if (!group) {
+        res.status(404).json({ error: 'Group not found' })
+        return
+      }
 
-    const members = database.getGroupMembers(groupId)
-    const signerMember = members.find(m => m.user_id === signer.id)
-    if (!signerMember || signerMember.role !== 'admin') {
-      res.status(403).json({ error: 'Only admins can add members' })
-      return
-    }
+      const members = database.getGroupMembers(groupId)
+      const signerMember = members.find(m => m.user_id === signer.id)
+      if (!signerMember || signerMember.role !== 'admin') {
+        res.status(403).json({ error: 'Only admins can add members' })
+        return
+      }
 
-    if (members.length >= 50) {
-      res.status(400).json({ error: 'Group is full (max 50 members)' })
-      return
-    }
+      if (members.length >= 50) {
+        res.status(400).json({ error: 'Group is full (max 50 members)' })
+        return
+      }
 
-    const { userId } = req.body as { userId?: string }
-    if (!userId || !isValidUuidLike(userId)) {
-      res.status(400).json({ error: 'Invalid userId' })
-      return
-    }
+      const { userId } = req.body as { userId?: string }
+      if (!userId || !isValidUuidLike(userId)) {
+        res.status(400).json({ error: 'Invalid userId' })
+        return
+      }
 
-    const targetUser = database.getUserById(userId)
-    if (!targetUser) {
-      res.status(404).json({ error: 'User not found' })
-      return
-    }
+      const targetUser = database.getUserById(userId)
+      if (!targetUser) {
+        res.status(404).json({ error: 'User not found' })
+        return
+      }
 
-    database.addGroupMember(groupId, userId)
-    res.json({ ok: true, members: database.getGroupMembers(groupId) })
-  } catch (error) {
-    console.error('Add group member error:', error instanceof Error ? error.message : String(error))
-    res.status(500).json({ error: 'Failed to add member' })
+      database.addGroupMember(groupId, userId)
+      res.json({ ok: true, members: database.getGroupMembers(groupId) })
+    } catch (error) {
+      console.error(
+        'Add group member error:',
+        error instanceof Error ? error.message : String(error)
+      )
+      res.status(500).json({ error: 'Failed to add member' })
+    }
   }
-})
+)
 
 // DELETE /groups/:groupId/members/:userId — remove a member or leave
 router.delete('/:groupId/members/:userId', requireSignature, (req: Request, res: Response) => {
@@ -237,7 +243,10 @@ router.delete('/:groupId/members/:userId', requireSignature, (req: Request, res:
 
     res.json({ ok: true, members: database.getGroupMembers(groupId) })
   } catch (error) {
-    console.error('Remove group member error:', error instanceof Error ? error.message : String(error))
+    console.error(
+      'Remove group member error:',
+      error instanceof Error ? error.message : String(error)
+    )
     res.status(500).json({ error: 'Failed to remove member' })
   }
 })

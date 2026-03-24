@@ -9,7 +9,8 @@ const router = Router()
 const pushLimiter = rateLimit({
   windowMs: 60_000,
   max: 20,
-  keyGenerator: (req: Request) => (req as unknown as { user?: { identityKey: string } }).user?.identityKey || req.ip || 'unknown',
+  keyGenerator: (req: Request) =>
+    (req as unknown as { user?: { identityKey: string } }).user?.identityKey || req.ip || 'unknown',
   standardHeaders: true,
   legacyHeaders: false,
 })
