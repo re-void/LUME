@@ -58,7 +58,7 @@ export default function ChatHeader({
             onClick={onOpenProfile}
             className="flex items-center gap-3 min-w-0 hover:bg-[var(--surface-alt)] rounded-[18px] px-2 py-1.5 transition-colors"
           >
-            <div className="w-11 h-11 rounded-full border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-sm)] p-[2px] flex-shrink-0">
+            <div className="w-11 h-11 rounded-full border border-[var(--border)] flex-shrink-0 overflow-hidden">
               <Avatar src={avatarUrl} username={contact.username} size="lg" />
             </div>
             <div className="min-w-0">
@@ -105,7 +105,7 @@ export default function ChatHeader({
       </div>
 
       {showOptions ? (
-        <div className="mt-4 flex items-center gap-2 flex-wrap">
+        <div className="mt-4 flex items-center gap-2 flex-wrap animate-fade-in-up">
           <span className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-muted)]">
             Auto-delete
           </span>
