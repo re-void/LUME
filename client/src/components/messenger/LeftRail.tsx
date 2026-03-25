@@ -128,9 +128,7 @@ export default function LeftRail({ onPanic, onOpenBackup }: { onPanic?: () => vo
       <div className="px-6 py-6 flex-1 min-h-0 overflow-y-auto">
         <div className="flex flex-col items-center text-center">
           <div className="relative">
-            <div className="w-24 h-24 rounded-full border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-sm)] p-[3px]">
               <Avatar src={ownAvatarUrl} username={username ?? "U"} size="xl" />
-            </div>
             {totalUnread > 0 ? (
               <span className="absolute -right-1 -top-1 w-7 h-7 rounded-full bg-[var(--accent)] text-[var(--accent-contrast)] text-[11px] font-semibold flex items-center justify-center border border-[var(--border)]">
                 {totalUnread > 99 ? '99+' : totalUnread}
