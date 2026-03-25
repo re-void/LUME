@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Modal } from "@/components/ui";
+import { useState, useEffect } from "react";
+import { Modal, Avatar } from "@/components/ui";
 import {
   useContactsStore,
   useBlockedStore,
@@ -9,7 +9,8 @@ import {
 } from "@/stores";
 import type { Contact } from "@/crypto/storage";
 import type { IdentityKeys } from "@/crypto/keys";
-import { authApi } from "@/lib/api";
+import { authApi, profileApi, filesApi } from "@/lib/api";
+import { downloadAndCacheAvatar, getCachedAvatarUrl } from "@/lib/avatarCache";
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -37,8 +38,41 @@ export default function ProfileModal({
   const [copiedSafety, setCopiedSafety] = useState(false);
   const [showDeleteContact, setShowDeleteContact] = useState(false);
   const [blockLoading, setBlockLoading] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   const contactId = contact.id;
+
+  // Fetch contact profile to get avatar
+  useEffect(() => {
+    if (!isOpen || !contactId || !identityKeys) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await profileApi.get(contactId, identityKeys);
+        if (cancelled || !res.data?.avatarFileId) return;
+
+        const fid = res.data.avatarFileId;
+        const cached = getCachedAvatarUrl(fid);
+        if (cached) {
+          setAvatarUrl(cached);
+          return;
+        }
+
+        const keys = identityKeys;
+        const url = await downloadAndCacheAvatar(fid, async () => {
+          const r = await filesApi.download(fid, keys);
+          if (!r.data) return null;
+          return { data: r.data.data, mimeHint: r.data.mimeHint };
+        });
+        if (!cancelled) setAvatarUrl(url);
+      } catch {
+        // Best effort
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [isOpen, contactId, identityKeys]);
 
   return (
     <Modal
@@ -47,8 +81,8 @@ export default function ProfileModal({
       title="Contact Profile"
     >
       <div className="flex flex-col items-center pt-2 pb-6">
-        <div className="w-24 h-24 bg-[var(--surface-strong)] rounded-full flex items-center justify-center text-[var(--text-primary)] text-4xl font-semibold mb-4 border border-[var(--border)]">
-          {contact.username[0]!.toUpperCase()}
+        <div className="mb-4">
+          <Avatar src={avatarUrl} username={contact.username} size="xl" />
         </div>
         <h2 className="text-[14px] font-semibold uppercase tracking-[0.14em] text-[var(--text-primary)] mb-1">
           @{contact.username}

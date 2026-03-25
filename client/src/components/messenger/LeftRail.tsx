@@ -1,8 +1,11 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthStore, useChatsStore, useUIStore } from '@/stores';
+import { Avatar } from '@/components/ui';
+import { profileApi, filesApi } from '@/lib/api';
+import { downloadAndCacheAvatar, getCachedAvatarUrl } from '@/lib/avatarCache';
 import ThemeToggle from '@/components/theme/ThemeToggle';
 
 function NavTile({
@@ -53,11 +56,46 @@ function NavTile({
 export default function LeftRail({ onPanic, onOpenBackup }: { onPanic?: () => void; onOpenBackup?: () => void }) {
   const router = useRouter();
   const pathname = usePathname();
+  const userId = useAuthStore((s) => s.userId);
   const username = useAuthStore((s) => s.username);
+  const identityKeys = useAuthStore((s) => s.identityKeys);
   const wsStatus = useUIStore((s) => s.wsStatus);
   const totalUnread = useChatsStore((s) => s.chats.reduce((sum, c) => sum + (c.unreadCount || 0), 0));
 
-  const initial = (username?.[0] || 'L').toUpperCase();
+  const [ownAvatarUrl, setOwnAvatarUrl] = useState<string | null>(null);
+
+  // Load own avatar
+  useEffect(() => {
+    if (!userId || !identityKeys) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await profileApi.get(userId, identityKeys);
+        if (cancelled || !res.data?.avatarFileId) return;
+
+        const fid = res.data.avatarFileId;
+        const cached = getCachedAvatarUrl(fid);
+        if (cached) {
+          setOwnAvatarUrl(cached);
+          return;
+        }
+
+        const keys = identityKeys;
+        const url = await downloadAndCacheAvatar(fid, async () => {
+          const r = await filesApi.download(fid, keys);
+          if (!r.data) return null;
+          return { data: r.data.data, mimeHint: r.data.mimeHint };
+        });
+        if (!cancelled) setOwnAvatarUrl(url);
+      } catch {
+        // Best effort
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [userId, identityKeys]);
+
   const messengerActive = pathname.startsWith('/chat') || pathname.startsWith('/chats');
   const statusLabel = wsStatus === 'connected' ? 'Online' : wsStatus === 'connecting' ? 'Connecting' : 'Offline';
   const statusDotClass =
@@ -91,9 +129,7 @@ export default function LeftRail({ onPanic, onOpenBackup }: { onPanic?: () => vo
         <div className="flex flex-col items-center text-center">
           <div className="relative">
             <div className="w-24 h-24 rounded-full border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-sm)] p-[3px]">
-              <div className="lume-avatar w-full h-full rounded-full border border-[var(--border)] flex items-center justify-center text-[var(--text-primary)] text-[32px] font-semibold">
-                {initial}
-              </div>
+              <Avatar src={ownAvatarUrl} username={username ?? "U"} size="xl" />
             </div>
             {totalUnread > 0 ? (
               <span className="absolute -right-1 -top-1 w-7 h-7 rounded-full bg-[var(--accent)] text-[var(--accent-contrast)] text-[11px] font-semibold flex items-center justify-center border border-[var(--border)]">

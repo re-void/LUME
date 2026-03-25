@@ -1,10 +1,12 @@
 "use client";
 
 import type { Contact } from "@/crypto/storage";
+import { Avatar } from "@/components/ui";
 import { formatTimerLabel, TIMER_OPTIONS } from "./chatUtils";
 
 interface ChatHeaderProps {
   contact: Contact;
+  avatarUrl?: string | null;
   isTyping: boolean;
   selfDestructTime: number | null;
   showOptions: boolean;
@@ -16,6 +18,7 @@ interface ChatHeaderProps {
 
 export default function ChatHeader({
   contact,
+  avatarUrl,
   isTyping,
   selfDestructTime,
   showOptions,
@@ -56,9 +59,7 @@ export default function ChatHeader({
             className="flex items-center gap-3 min-w-0 hover:bg-[var(--surface-alt)] rounded-[18px] px-2 py-1.5 transition-colors"
           >
             <div className="w-11 h-11 rounded-full border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-sm)] p-[2px] flex-shrink-0">
-              <div className="lume-avatar w-full h-full rounded-full border border-[var(--border)] flex items-center justify-center text-[var(--text-primary)] text-[16px] font-semibold">
-                {contact.username[0]!.toUpperCase()}
-              </div>
+              <Avatar src={avatarUrl} username={contact.username} size="lg" />
             </div>
             <div className="min-w-0">
               <p className="text-[13px] font-semibold uppercase tracking-[0.06em] text-[var(--text-primary)] truncate">
