@@ -25,6 +25,7 @@ export default function ProfileSection() {
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -129,10 +130,17 @@ export default function ProfileSection() {
     if (!userId || !identityKeys) return;
     const name = displayNameRef.current.trim();
     setSaving(true);
+    setError(null);
     try {
-      await profileApi.update(userId, { displayName: name || null }, identityKeys);
+      const res = await profileApi.update(userId, { displayName: name || null }, identityKeys);
+      if (res.error) {
+        setError(res.error);
+        return;
+      }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1500);
     } catch {
-      // Best effort
+      setError("Failed to save display name.");
     } finally {
       setSaving(false);
     }
@@ -220,6 +228,10 @@ export default function ProfileSection() {
             {saving ? (
               <p className="text-[11px] text-[var(--text-muted)] mt-1 animate-pulse">
                 Saving...
+              </p>
+            ) : saved ? (
+              <p className="text-[11px] text-[var(--accent)] mt-1">
+                Saved
               </p>
             ) : null}
           </div>

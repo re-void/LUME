@@ -22,20 +22,14 @@ export default function StatusBanner() {
     );
   }
 
-  if (wsStatus === 'connected') return null;
+  // Only show banners for real errors — not transient connecting/disconnected states
+  if (wsStatus === 'connected' || wsStatus === 'connecting' || wsStatus === 'disconnected') return null;
 
   let content = '';
   let tone = 'text-[var(--text-secondary)]';
   const bg = 'bg-[var(--surface)]';
 
   switch (wsStatus) {
-    case 'connecting':
-      content = 'Подключение...';
-      tone = 'text-[var(--text-primary)]';
-      break;
-    case 'disconnected':
-      content = 'Нет соединения с сервером';
-      break;
     case 'rate_limited':
       content = 'Лимит запросов. Повторите через 60 секунд.';
       tone = 'text-[var(--accent)]';
