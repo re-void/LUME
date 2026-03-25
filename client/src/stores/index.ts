@@ -383,6 +383,8 @@ interface BlockedState {
     isBlocked: (id: string) => boolean;
 }
 
+export { useGroupsStore } from './groups';
+
 export const useBlockedStore = create<BlockedState>()((set, get) => ({
     blockedIds: {},
 

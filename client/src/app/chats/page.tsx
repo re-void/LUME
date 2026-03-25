@@ -13,19 +13,22 @@ import LeftRail from "@/components/messenger/LeftRail";
 import ChatListPanel from "@/components/messenger/ChatListPanel";
 import RightRail from "@/components/messenger/RightRail";
 import { ChatListSkeleton } from "@/components/ui";
-import { AddContactModal, BackupModal, PanicModal } from "@/components/modals";
+import GroupView from "@/components/chat/GroupView";
+import { AddContactModal, BackupModal, CreateGroupModal, PanicModal } from "@/components/modals";
 import { useMessengerSync } from "@/hooks/useMessengerSync";
 import { useContactActions } from "@/hooks/useContactActions";
 import { usePanic } from "@/hooks/usePanic";
-import { useAuthStore, useContactsStore, useChatsStore } from "@/stores";
+import { groupsApi } from "@/lib/api";
+import { useAuthStore, useContactsStore, useChatsStore, useGroupsStore } from "@/stores";
 
 export default function ChatsPage() {
   const router = useRouter();
 
   const { hydrated } = useMessengerSync();
-  const { isAuthenticated, masterKey } = useAuthStore();
+  const { isAuthenticated, identityKeys, masterKey } = useAuthStore();
   const { contacts } = useContactsStore();
   const { chats, activeChatId, setActiveChat } = useChatsStore();
+  const { groups, activeGroupId, setGroups, setActiveGroup } = useGroupsStore();
 
   const {
     showAddContact,
@@ -44,6 +47,7 @@ export default function ChatsPage() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [showBackupModal, setShowBackupModal] = useState(false);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
 
   // Auth guard — redirect in useEffect to avoid render-phase side effects.
   useEffect(() => {
@@ -51,6 +55,17 @@ export default function ChatsPage() {
       router.push("/");
     }
   }, [hydrated, isAuthenticated, router]);
+
+  // Fetch groups on mount / when identity keys become available
+  useEffect(() => {
+    if (!identityKeys) return;
+    void (async () => {
+      const result = await groupsApi.list(identityKeys);
+      if (result.data?.groups) {
+        setGroups(result.data.groups);
+      }
+    })();
+  }, [identityKeys, setGroups]);
 
   if (!hydrated) {
     return (
@@ -71,9 +86,19 @@ export default function ChatsPage() {
   }
 
   const handleSelectChat = (chatId: string) => {
+    if (!chatId) {
+      // Called when switching to groups tab — clear individual chat selection
+      setActiveChat(null);
+      return;
+    }
+    setActiveGroup(null);
     setActiveChat(chatId);
     router.push(`/chat/${chatId}`);
   };
+
+  const activeGroup = activeGroupId
+    ? groups.find((g) => g.id === activeGroupId) ?? null
+    : null;
 
   if (isPanicMode) {
     return (
@@ -121,6 +146,10 @@ export default function ChatsPage() {
     </div>
   );
 
+  const mainContent = activeGroup
+    ? <GroupView group={activeGroup} />
+    : emptyMain;
+
   const chatListNode = (
     <ChatListPanel
       chats={chats}
@@ -130,6 +159,7 @@ export default function ChatsPage() {
       onSearchChange={setSearchQuery}
       onSelectChat={handleSelectChat}
       onNewChat={() => setShowAddContact(true)}
+      onNewGroup={() => setShowCreateGroup(true)}
     />
   );
 
@@ -155,7 +185,7 @@ export default function ChatsPage() {
         <MessengerShell
           leftRail={leftRailNode}
           chatList={chatListNode}
-          main={emptyMain}
+          main={mainContent}
           rightRail={
             contacts.length > 0 ? (
               <RightRail
@@ -183,6 +213,11 @@ export default function ChatsPage() {
         isOpen={showPanicConfirm}
         onClose={() => setShowPanicConfirm(false)}
         onConfirm={executePanic}
+      />
+
+      <CreateGroupModal
+        isOpen={showCreateGroup}
+        onClose={() => setShowCreateGroup(false)}
       />
 
       <BackupModal

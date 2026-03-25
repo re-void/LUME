@@ -3,9 +3,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Chat } from '@/stores';
-import { useAuthStore, useBlockedStore, useChatsStore, useUIStore } from '@/stores';
+import { useAuthStore, useBlockedStore, useChatsStore, useGroupsStore, useUIStore } from '@/stores';
+import type { GroupData } from '@/lib/api';
 import { loadSettings, verifyHiddenChatPin, isLegacyHiddenPinHash, hashHiddenChatPin, saveSettings, type Contact } from '@/crypto/storage';
-import { Button, Input, Modal } from '@/components/ui';
+import { Avatar, Button, Input, Modal } from '@/components/ui';
 
 function formatTime(timestamp?: number) {
   if (!timestamp) return '';
@@ -58,15 +59,7 @@ function ChatRow({
     >
       {selected ? <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-[var(--accent)]" aria-hidden="true" /> : null}
       <div className="flex items-center gap-3">
-        <div
-          className={`
-            w-11 h-11 rounded-full border flex items-center justify-center font-semibold flex-shrink-0
-            shadow-[var(--shadow-sm)]
-            ${selected ? 'border-[var(--accent)]/35 bg-[var(--surface)]' : 'border-[var(--border)] bg-[var(--surface)]'}
-          `}
-        >
-          {contact.username[0]!.toUpperCase()}
-        </div>
+        <Avatar username={contact.username} size="lg" />
 
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-3">
@@ -126,6 +119,60 @@ function ChatRow({
   );
 }
 
+function GroupRow({
+  group,
+  selected,
+  onClick,
+}: {
+  group: GroupData;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`
+        relative w-full px-4 py-3.5 sm:py-3 text-left transition-colors
+        border-b border-[var(--border)]/55 last:border-b-0
+        min-h-[56px] sm:min-h-0
+        ${selected ? 'bg-[var(--surface-strong)] text-[var(--text-primary)]' : 'hover:bg-[var(--surface-alt)] active:bg-[var(--surface-strong)] text-[var(--text-primary)]'}
+      `}
+    >
+      {selected ? <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-[var(--accent)]" aria-hidden="true" /> : null}
+      <div className="flex items-center gap-3">
+        <div
+          className={`
+            w-11 h-11 rounded-full border flex items-center justify-center flex-shrink-0
+            shadow-[var(--shadow-sm)]
+            ${selected ? 'border-[var(--accent)]/35 bg-[var(--surface)]' : 'border-[var(--border)] bg-[var(--surface)]'}
+          `}
+        >
+          <svg className="w-5 h-5 text-[var(--text-muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2" />
+            <circle cx="9" cy="7" r="4" strokeWidth="1.8" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M23 21v-2a4 4 0 00-3-3.87" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M16 3.13a4 4 0 010 7.75" />
+          </svg>
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-[13px] font-semibold text-[var(--text-primary)]">
+                {group.name}
+              </p>
+              <p className="truncate text-[12px] mt-0.5 text-[var(--text-secondary)]">
+                {group.members.length} {group.members.length === 1 ? 'member' : 'members'}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </button>
+  );
+}
+
 export default function ChatListPanel({
   chats,
   contacts,
@@ -134,6 +181,7 @@ export default function ChatListPanel({
   onSearchChange,
   onSelectChat,
   onNewChat,
+  onNewGroup,
 }: {
   chats: Chat[];
   contacts: Contact[];
@@ -142,13 +190,18 @@ export default function ChatListPanel({
   onSearchChange: (value: string) => void;
   onSelectChat: (chatId: string) => void;
   onNewChat: () => void;
+  onNewGroup?: () => void;
 }) {
   const router = useRouter();
   const masterKey = useAuthStore((s) => s.masterKey);
   const showHiddenChats = useUIStore((s) => s.showHiddenChats);
   const setShowHiddenChats = useUIStore((s) => s.setShowHiddenChats);
   const setChatHidden = useChatsStore((s) => s.setChatHidden);
+  const groups = useGroupsStore((s) => s.groups);
+  const activeGroupId = useGroupsStore((s) => s.activeGroupId);
+  const setActiveGroup = useGroupsStore((s) => s.setActiveGroup);
 
+  const [activeTab, setActiveTab] = useState<'chats' | 'groups'>('chats');
   const [hiddenChatsEnabled, setHiddenChatsEnabled] = useState(false);
   const [hiddenChatPinHash, setHiddenChatPinHash] = useState<string | null>(null);
   const [showUnlockModal, setShowUnlockModal] = useState(false);
@@ -284,15 +337,26 @@ export default function ChatListPanel({
       return chat.messages.some((m) => m.content.toLowerCase().includes(query));
     });
 
+  const filteredGroups = groups.filter((g) => {
+    if (!query) return true;
+    return g.name.toLowerCase().includes(query);
+  });
+
+  const handleSelectGroup = (groupId: string) => {
+    setActiveGroup(groupId);
+    // Clear individual chat selection when selecting a group
+    onSelectChat('');
+  };
+
   return (
-    <div className="lume-panel h-full min-h-0 rounded-[var(--radius-lg)] border border-[var(--border)] shadow-[var(--shadow-sm)] overflow-hidden">
-      <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 sm:pb-4 border-b border-[var(--border)]/70">
+    <div className="lume-panel h-full min-h-0 rounded-[var(--radius-lg)] border border-[var(--border)] shadow-[var(--shadow-sm)] overflow-hidden flex flex-col">
+      <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 sm:pb-4 border-b border-[var(--border)]/70 flex-shrink-0">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-[12px] font-semibold uppercase tracking-[0.18em] text-[var(--text-primary)]">
-              Messages
+              {activeTab === 'chats' ? 'Messages' : 'Groups'}
             </h2>
-            {hiddenChatsEnabled ? (
+            {activeTab === 'chats' && hiddenChatsEnabled ? (
               <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
                 {showHiddenChats ? 'Hidden mode' : 'Main mode'}
               </p>
@@ -312,7 +376,7 @@ export default function ChatListPanel({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
               </svg>
             </button>
-            {hiddenChatsEnabled ? (
+            {activeTab === 'chats' && hiddenChatsEnabled ? (
               <button
                 type="button"
                 onClick={toggleHiddenView}
@@ -335,10 +399,10 @@ export default function ChatListPanel({
             ) : null}
             <button
               type="button"
-              onClick={onNewChat}
+              onClick={activeTab === 'chats' ? onNewChat : (onNewGroup ?? onNewChat)}
               className="lume-icon-btn"
-              aria-label="New chat"
-              title="New chat"
+              aria-label={activeTab === 'chats' ? 'New chat' : 'New group'}
+              title={activeTab === 'chats' ? 'New chat' : 'New group'}
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M12 5v14" />
@@ -348,7 +412,35 @@ export default function ChatListPanel({
           </div>
         </div>
 
-        <div className="mt-3 sm:mt-4">
+        {/* Tabs */}
+        <div className="mt-3 flex rounded-xl border border-[var(--border)] bg-[var(--surface-strong)] overflow-hidden">
+          <button
+            type="button"
+            onClick={() => { setActiveTab('chats'); setActiveGroup(null); }}
+            className={`
+              flex-1 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors
+              ${activeTab === 'chats'
+                ? 'bg-[var(--surface)] text-[var(--text-primary)] shadow-[var(--shadow-sm)]'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}
+            `}
+          >
+            Chats
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('groups')}
+            className={`
+              flex-1 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] transition-colors
+              ${activeTab === 'groups'
+                ? 'bg-[var(--surface)] text-[var(--text-primary)] shadow-[var(--shadow-sm)]'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}
+            `}
+          >
+            Groups
+          </button>
+        </div>
+
+        <div className="mt-3">
           <div className="relative">
             <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)]">
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -363,9 +455,13 @@ export default function ChatListPanel({
             <input
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              placeholder={modeScopedChats.length > 0 ? 'Search...' : 'No chats yet'}
-              disabled={modeScopedChats.length === 0}
-              aria-label="Search chats"
+              placeholder={
+                activeTab === 'chats'
+                  ? (modeScopedChats.length > 0 ? 'Search...' : 'No chats yet')
+                  : (groups.length > 0 ? 'Search groups...' : 'No groups yet')
+              }
+              disabled={activeTab === 'chats' ? modeScopedChats.length === 0 : groups.length === 0}
+              aria-label={activeTab === 'chats' ? 'Search chats' : 'Search groups'}
               className="apple-input apple-input-icon disabled:opacity-60 disabled:cursor-not-allowed"
             />
           </div>
@@ -374,22 +470,33 @@ export default function ChatListPanel({
 
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="py-1">
-          {filtered.map((chat) => {
-            const contact = contacts.find((c) => c.id === chat.contactId);
-            if (!contact) return null;
-            return (
-              <ChatRow
-                key={chat.id}
-                chat={chat}
-                contact={contact}
-                selected={selectedChatId === chat.id}
-                onClick={() => onSelectChat(chat.id)}
-                showHiddenControls={hiddenChatsEnabled}
-                onToggleHidden={toggleChatHidden}
-                searchHighlight={query || undefined}
+          {activeTab === 'chats' ? (
+            filtered.map((chat) => {
+              const contact = contacts.find((c) => c.id === chat.contactId);
+              if (!contact) return null;
+              return (
+                <ChatRow
+                  key={chat.id}
+                  chat={chat}
+                  contact={contact}
+                  selected={selectedChatId === chat.id}
+                  onClick={() => onSelectChat(chat.id)}
+                  showHiddenControls={hiddenChatsEnabled}
+                  onToggleHidden={toggleChatHidden}
+                  searchHighlight={query || undefined}
+                />
+              );
+            })
+          ) : (
+            filteredGroups.map((group) => (
+              <GroupRow
+                key={group.id}
+                group={group}
+                selected={activeGroupId === group.id}
+                onClick={() => handleSelectGroup(group.id)}
               />
-            );
-          })}
+            ))
+          )}
         </div>
       </div>
 
