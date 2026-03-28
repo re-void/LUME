@@ -219,11 +219,29 @@ class WebSocketClient {
     }
 
     /**
-     * Отправляет подтверждение прочтения
+     * Отправляет подтверждение прочтения.
+     * Batches receipts per recipient over 100ms to reduce WS traffic.
      */
+    private readReceiptBatch: Map<string, { ids: Set<string>; timer: ReturnType<typeof setTimeout> }> = new Map();
+
     sendReadReceipt(recipientId: string, messageIds: string[]): void {
         if (messageIds.length === 0) return;
-        this.send({ type: 'read', recipientId, messageIds });
+
+        let batch = this.readReceiptBatch.get(recipientId);
+        if (!batch) {
+            batch = { ids: new Set(), timer: setTimeout(() => this.flushReadReceipts(recipientId), 100) };
+            this.readReceiptBatch.set(recipientId, batch);
+        }
+        for (const id of messageIds) {
+            batch.ids.add(id);
+        }
+    }
+
+    private flushReadReceipts(recipientId: string): void {
+        const batch = this.readReceiptBatch.get(recipientId);
+        if (!batch || batch.ids.size === 0) return;
+        this.readReceiptBatch.delete(recipientId);
+        this.send({ type: 'read', recipientId, messageIds: [...batch.ids] });
     }
 
     /**
