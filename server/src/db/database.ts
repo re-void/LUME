@@ -22,7 +22,7 @@ db.pragma('journal_mode = WAL')
 db.pragma('foreign_keys = ON')
 db.pragma('busy_timeout = 3000')
 db.pragma('synchronous = NORMAL')
-db.pragma('cache_size = -64000')  // 64MB cache
+db.pragma('cache_size = -64000') // 64MB cache
 db.pragma('temp_store = MEMORY')
 
 // ==================== Tables ====================

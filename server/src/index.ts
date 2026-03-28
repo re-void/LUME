@@ -230,10 +230,13 @@ const fileCleanupTimer = setInterval(() => {
 fileCleanupTimer.unref()
 
 // Cleanup old request signatures every 5 minutes
-const sigCleanupTimer = setInterval(() => {
-  const cutoff = Math.floor(Date.now() / 1000) - 180
-  database.cleanupRequestSignatures(cutoff)
-}, 5 * 60 * 1000)
+const sigCleanupTimer = setInterval(
+  () => {
+    const cutoff = Math.floor(Date.now() / 1000) - 180
+    database.cleanupRequestSignatures(cutoff)
+  },
+  5 * 60 * 1000
+)
 sigCleanupTimer.unref()
 
 // Graceful shutdown
