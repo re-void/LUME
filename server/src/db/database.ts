@@ -235,8 +235,19 @@ const insertMessage = db.prepare(`
   VALUES (?, ?, ?, ?)
 `)
 
-const getPendingMessages = db.prepare(`
-  SELECT * FROM pending_messages WHERE recipient_id = ? ORDER BY created_at ASC
+const getPendingMessagesFirst = db.prepare(`
+  SELECT * FROM pending_messages
+  WHERE recipient_id = ?
+  ORDER BY created_at ASC, id ASC
+  LIMIT ?
+`)
+
+const getPendingMessagesAfter = db.prepare(`
+  SELECT * FROM pending_messages
+  WHERE recipient_id = ?
+    AND (created_at > ? OR (created_at = ? AND id > ?))
+  ORDER BY created_at ASC, id ASC
+  LIMIT ?
 `)
 
 const getMessageById = db.prepare(`
@@ -263,6 +274,20 @@ const insertRequestSignature = db.prepare(`
 const cleanupOldRequestSignatures = db.prepare(`
   DELETE FROM request_signatures WHERE created_at < ?
 `)
+
+const countRequestSignatures = db.prepare(`
+  SELECT COUNT(*) as cnt FROM request_signatures
+`)
+
+const truncateOldestRequestSignatures = db.prepare(`
+  DELETE FROM request_signatures WHERE rowid IN (SELECT rowid FROM request_signatures ORDER BY created_at ASC LIMIT ?)
+`)
+
+// Throttle COUNT(*) checks: only query every 1000 inserts
+const SIG_ROW_CAP = 100_000
+const SIG_TRUNCATE_AMOUNT = 10_000
+const SIG_CHECK_INTERVAL = 1000
+let sigInsertsSinceCheck = 0
 
 const insertBlock = db.prepare(`
   INSERT OR IGNORE INTO blocked_users (blocker_id, blocked_id)
@@ -368,6 +393,9 @@ export interface User {
 const USERS_BY_IDS_CACHE_MAX = 50
 const getUsersByIdsCache = new Map<number, ReturnType<typeof db.prepare>>()
 
+// Cache for getGroupMembersForGroups prepared statements keyed by number of IDs.
+const groupMembersForGroupsCache = new Map<number, ReturnType<typeof db.prepare>>()
+
 export interface PendingMessage {
   id: string
   sender_id: string
@@ -460,8 +488,37 @@ export const database = {
     insertMessage.run(id, senderId, recipientId, encryptedPayload)
   },
 
-  getPendingMessages(recipientId: string): PendingMessage[] {
-    return getPendingMessages.all(recipientId) as PendingMessage[]
+  getPendingMessages(
+    recipientId: string,
+    options?: { limit?: number; afterId?: string }
+  ): { messages: PendingMessage[]; hasMore: boolean } {
+    const limit = Math.min(options?.limit ?? 100, 200)
+    const fetchCount = limit + 1
+
+    let rows: PendingMessage[]
+
+    if (options?.afterId) {
+      const cursor = getMessageById.get(options.afterId) as PendingMessage | undefined
+      if (!cursor) {
+        return { messages: [], hasMore: false }
+      }
+      rows = getPendingMessagesAfter.all(
+        recipientId,
+        cursor.created_at,
+        cursor.created_at,
+        cursor.id,
+        fetchCount
+      ) as PendingMessage[]
+    } else {
+      rows = getPendingMessagesFirst.all(recipientId, fetchCount) as PendingMessage[]
+    }
+
+    const hasMore = rows.length > limit
+    if (hasMore) {
+      rows = rows.slice(0, limit)
+    }
+
+    return { messages: rows, hasMore }
   },
 
   getUsersByIds(userIds: string[]): User[] {
@@ -520,6 +577,16 @@ export const database = {
 
   rememberRequestSignature(requestHash: string, identityKey: string): boolean {
     const result = insertRequestSignature.run(requestHash, identityKey)
+    if (result.changes > 0) {
+      sigInsertsSinceCheck++
+      if (sigInsertsSinceCheck >= SIG_CHECK_INTERVAL) {
+        sigInsertsSinceCheck = 0
+        const row = countRequestSignatures.get() as { cnt: number }
+        if (row.cnt >= SIG_ROW_CAP) {
+          truncateOldestRequestSignatures.run(SIG_TRUNCATE_AMOUNT)
+        }
+      }
+    }
     return result.changes > 0
   },
 
@@ -595,6 +662,36 @@ export const database = {
 
   getGroupMembers(groupId: string): GroupMember[] {
     return getGroupMembers.all(groupId) as GroupMember[]
+  },
+
+  getGroupMembersForGroups(groupIds: string[]): Record<string, GroupMember[]> {
+    if (groupIds.length === 0) return {}
+    const key = groupIds.length
+    if (!groupMembersForGroupsCache.has(key)) {
+      if (groupMembersForGroupsCache.size >= USERS_BY_IDS_CACHE_MAX) {
+        const oldest = groupMembersForGroupsCache.keys().next().value
+        if (oldest !== undefined) groupMembersForGroupsCache.delete(oldest)
+      }
+      const placeholders = groupIds.map(() => '?').join(', ')
+      groupMembersForGroupsCache.set(
+        key,
+        db.prepare(
+          `SELECT gm.*, u.username FROM group_members gm JOIN users u ON u.id = gm.user_id WHERE gm.group_id IN (${placeholders})`
+        )
+      )
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rows = (groupMembersForGroupsCache.get(key)!.all as (...p: any[]) => unknown[])(
+      ...groupIds
+    ) as GroupMember[]
+    const result: Record<string, GroupMember[]> = {}
+    for (const id of groupIds) {
+      result[id] = []
+    }
+    for (const row of rows) {
+      result[row.group_id]!.push(row)
+    }
+    return result
   },
 
   getUserGroups(userId: string): Group[] {

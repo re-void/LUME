@@ -20,7 +20,7 @@ export default function RecoverPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleValidatePhrase = () => {
+  const handleValidatePhrase = async () => {
     if (!username || !/^[a-zA-Z0-9_]{3,32}$/.test(username)) {
       setError('Enter a valid username');
       return;
@@ -34,7 +34,7 @@ export default function RecoverPage() {
       return;
     }
 
-    if (!validateMnemonic(trimmed)) {
+    if (!(await validateMnemonic(trimmed))) {
       setError('Invalid recovery phrase');
       return;
     }
