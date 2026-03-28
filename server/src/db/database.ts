@@ -670,9 +670,9 @@ export const database = {
 
   getGroupMembersForGroups(groupIds: string[]): Record<string, GroupMember[]> {
     if (groupIds.length === 0) return {}
-    const result: Record<string, GroupMember[]> = {}
+    const result = new Map<string, GroupMember[]>()
     for (const id of groupIds) {
-      result[id] = []
+      result.set(id, [])
     }
     for (let i = 0; i < groupIds.length; i += 500) {
       const chunk = groupIds.slice(i, i + 500)
@@ -683,10 +683,10 @@ export const database = {
         )
         .all(...chunk) as GroupMember[]
       for (const row of rows) {
-        result[row.group_id]!.push(row)
+        result.get(row.group_id)?.push(row)
       }
     }
-    return result
+    return Object.fromEntries(result)
   },
 
   getUserGroups(userId: string): Group[] {

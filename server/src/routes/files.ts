@@ -146,7 +146,7 @@ router.get(
       res.setHeader('X-Mime-Hint', file.mime_hint ?? 'application/octet-stream')
 
       const stream = fs.createReadStream(filePath)
-      stream.on('error', (err) => {
+      stream.on('error', err => {
         console.error('File stream error:', err instanceof Error ? err.message : String(err))
         if (!res.headersSent) {
           res.status(500).json({ error: 'Failed to stream file' })
