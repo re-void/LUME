@@ -29,6 +29,7 @@ router.get(
       return
     }
 
+    res.setHeader('Cache-Control', 'private, max-age=300')
     res.json({
       id: user.id,
       username: user.username,

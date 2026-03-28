@@ -239,14 +239,20 @@ describe('WebSocketClient', () => {
   });
 
   describe('sendReadReceipt', () => {
-    it('sends read receipt with message IDs', async () => {
+    it('sends read receipt with message IDs (batched)', async () => {
+      vi.useFakeTimers();
       const p = wsClient.connect('tok');
       MockWebSocket.lastInstance.simulateOpen();
       await p;
 
       wsClient.sendReadReceipt('recipient-1', ['m1', 'm2']);
+      // Batched — nothing sent yet
+      expect(MockWebSocket.lastInstance.sentMessages).toHaveLength(0);
+
+      vi.advanceTimersByTime(100);
       const sent = JSON.parse(MockWebSocket.lastInstance.sentMessages[0]!);
       expect(sent).toEqual({ type: 'read', recipientId: 'recipient-1', messageIds: ['m1', 'm2'] });
+      vi.useRealTimers();
     });
 
     it('does not send if messageIds is empty', async () => {

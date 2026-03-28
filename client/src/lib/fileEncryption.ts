@@ -2,18 +2,74 @@
  * Client-side file encryption for E2E encrypted attachments.
  * Files are encrypted with a random key using XSalsa20-Poly1305 (NaCl secretbox).
  * The key is then shared via the message payload (already encrypted by the ratchet).
+ *
+ * Heavy crypto is offloaded to a Web Worker when available to keep the UI responsive.
  */
 
 import nacl from 'tweetnacl';
 import { encodeBase64, decodeBase64 } from 'tweetnacl-util';
+import type { CryptoWorkerRequest, CryptoWorkerResponse } from './cryptoWorker';
 
-/**
- * Yield the thread so the browser can paint and React can update.
- * Used to wrap heavy synchronous crypto operations.
- */
+// ── Worker management ───────────────────────────────────────────
+
+let worker: Worker | null = null;
+let requestId = 0;
+const pending = new Map<number, {
+  resolve: (v: CryptoWorkerResponse) => void;
+  reject: (e: Error) => void;
+}>();
+
+function getWorker(): Worker | null {
+  if (worker) return worker;
+  if (typeof window === 'undefined' || typeof Worker === 'undefined') return null;
+
+  try {
+    worker = new Worker(new URL('./cryptoWorker.ts', import.meta.url), { type: 'module' });
+    worker.onmessage = (e: MessageEvent<CryptoWorkerResponse>) => {
+      const p = pending.get(e.data.id);
+      if (p) {
+        pending.delete(e.data.id);
+        p.resolve(e.data);
+      }
+    };
+    worker.onerror = () => {
+      // Worker failed — disable and fall back to main thread
+      worker?.terminate();
+      worker = null;
+      for (const p of pending.values()) {
+        p.reject(new Error('Worker crashed'));
+      }
+      pending.clear();
+    };
+    return worker;
+  } catch {
+    return null;
+  }
+}
+
+function postToWorker(msg: Record<string, unknown>, transfer?: Transferable[]): Promise<CryptoWorkerResponse> {
+  const w = getWorker();
+  if (!w) return Promise.reject(new Error('No worker'));
+
+  const id = ++requestId;
+  const full = { ...msg, id } as CryptoWorkerRequest;
+  return new Promise((resolve, reject) => {
+    pending.set(id, { resolve, reject });
+    if (transfer) {
+      w.postMessage(full, transfer);
+    } else {
+      w.postMessage(full);
+    }
+  });
+}
+
+// ── Fallback: main-thread yield ─────────────────────────────────
+
 async function yieldThread(): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, 0));
 }
+
+// ── Public API ──────────────────────────────────────────────────
 
 export interface EncryptedFile {
   /** Base64-encoded encrypted data */
@@ -45,6 +101,28 @@ export async function encryptFile(
   mimeType: string,
   fileName: string
 ): Promise<EncryptedFile> {
+  // Try Web Worker first
+  try {
+    const copy = new Uint8Array(data);
+    const resp = await postToWorker(
+      { type: 'encrypt', data: copy },
+      [copy.buffer as ArrayBuffer],
+    );
+    if (resp.type === 'encrypt') {
+      return {
+        ciphertext: resp.ciphertext,
+        nonce: resp.nonce,
+        key: resp.key,
+        mimeType,
+        fileName,
+        originalSize: data.length,
+      };
+    }
+  } catch {
+    // Fall through to main thread
+  }
+
+  // Fallback: main thread with yield
   const key = nacl.randomBytes(nacl.secretbox.keyLength);
   const nonce = nacl.randomBytes(nacl.secretbox.nonceLength);
 
@@ -72,6 +150,23 @@ export async function decryptFile(
   mimeType: string,
   fileName: string
 ): Promise<DecryptedFile | null> {
+  // Try Web Worker first
+  try {
+    const resp = await postToWorker({
+      type: 'decrypt',
+      ciphertext: ciphertextBase64,
+      nonce: nonceBase64,
+      key: keyBase64,
+    });
+    if (resp.type === 'decrypt') {
+      if (!resp.data) return null;
+      return { data: resp.data, mimeType, fileName };
+    }
+  } catch {
+    // Fall through to main thread
+  }
+
+  // Fallback: main thread with yield
   try {
     const ciphertext = decodeBase64(ciphertextBase64);
     const nonce = decodeBase64(nonceBase64);

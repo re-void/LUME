@@ -165,6 +165,7 @@ router.get(
 
       res.setHeader('Content-Type', 'application/octet-stream')
       res.setHeader('Content-Length', stat.size)
+      res.setHeader('Cache-Control', 'private, immutable, max-age=86400')
       res.setHeader('X-File-Id', file.id)
       res.setHeader('X-Mime-Hint', file.mime_hint ?? 'application/octet-stream')
 
