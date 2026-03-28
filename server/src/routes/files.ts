@@ -11,7 +11,21 @@ import { UploadFileBodySchema, FileIdParamSchema } from '../schemas/files'
 
 const router = Router()
 
-const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '../../data/uploads')
+const UPLOAD_DIR = path.resolve(
+  process.env.UPLOAD_DIR || path.join(__dirname, '../../data/uploads')
+)
+
+/**
+ * Safely resolve a file path within UPLOAD_DIR.
+ * Returns null if the resolved path escapes the upload directory (path traversal).
+ */
+function safeFilePath(fileId: string): string | null {
+  const resolved = path.resolve(UPLOAD_DIR, fileId)
+  if (!resolved.startsWith(UPLOAD_DIR + path.sep) && resolved !== UPLOAD_DIR) {
+    return null
+  }
+  return resolved
+}
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5 MB
 const MAX_FILES_PER_USER = 500
 const FILE_EXPIRY_DAYS = 30
@@ -86,7 +100,11 @@ router.post(
       const expiresAt = Math.floor(Date.now() / 1000) + FILE_EXPIRY_DAYS * 24 * 60 * 60
 
       // Write encrypted blob to disk
-      const filePath = path.join(UPLOAD_DIR, fileId)
+      const filePath = safeFilePath(fileId)
+      if (!filePath) {
+        res.status(400).json({ error: 'Invalid file ID' })
+        return
+      }
       await fs.promises.writeFile(filePath, buffer)
 
       database.createFile(fileId, signerId, buffer.length, safeMime, expiresAt)
@@ -130,7 +148,11 @@ router.get(
         return
       }
 
-      const filePath = path.join(UPLOAD_DIR, fileId)
+      const filePath = safeFilePath(fileId)
+      if (!filePath) {
+        res.status(400).json({ error: 'Invalid file ID' })
+        return
+      }
 
       let stat: fs.Stats
       try {
@@ -191,7 +213,11 @@ router.get(
         return
       }
 
-      const filePath = path.join(UPLOAD_DIR, fileId)
+      const filePath = safeFilePath(fileId)
+      if (!filePath) {
+        res.status(400).json({ error: 'Invalid file ID' })
+        return
+      }
       try {
         await fs.promises.access(filePath)
       } catch {
