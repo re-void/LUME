@@ -13,7 +13,7 @@
 <br>
 
 <p align="center">
-  <code>X3DH key agreement  ·  Double Ratchet  ·  Forward secrecy  ·  E2E file transfer</code>
+  <code>No phone number  ·  No email  ·  No password  ·  No metadata  ·  No trust required</code>
 </p>
 
 <br>
