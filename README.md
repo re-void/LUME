@@ -1,21 +1,5 @@
 # LUME
 
-End-to-end encrypted messenger. Zero knowledge architecture — the server is a blind relay that never sees plaintext.
-
-## Cryptography
-
-| Layer | Implementation |
-|-------|---------------|
-| Key Exchange | X3DH (Extended Triple Diffie-Hellman) |
-| Message Encryption | Double Ratchet Protocol |
-| Symmetric Cipher | XSalsa20-Poly1305 (NaCl secretbox) |
-| Signing | Ed25519 |
-| Key Agreement | X25519 |
-| Key Derivation | HMAC-SHA256 (ratchet), PBKDF2-SHA256 600K iterations (storage) |
-| File Encryption | Per-file random key, XSalsa20-Poly1305 |
-
-Authentication is signature-based — no passwords, no sessions, no cookies. Every API request is signed with your Ed25519 identity key.
-
 ## Stack
 
 **Client:** Next.js 16, React 19, Tailwind CSS, Zustand, tweetnacl
@@ -50,7 +34,7 @@ Authentication is signature-based — no passwords, no sessions, no cookies. Eve
 
 ```
 ┌─────────────┐         ┌─────────────┐
-│   Client    │◄──E2E──►│   Client    │
+│   Client A  │◄──E2E──►│   Client B  │
 │  (Next.js)  │         │  (Next.js)  │
 └──────┬──────┘         └──────┬──────┘
        │  Encrypted blobs only │
