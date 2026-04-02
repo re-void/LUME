@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="docs/logo.png" alt="LUME" width="600">
-</p>
+![LUME](docs/logo.png)
 
 <p align="center">
   <strong>Anonymous end-to-end encrypted messenger.</strong><br>
