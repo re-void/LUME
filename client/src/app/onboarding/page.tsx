@@ -104,6 +104,7 @@ export default function OnboardingPage() {
       router.replace("/");
       return;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- gate render until redirect check completes
     setReady(true);
   }, [router]);
 

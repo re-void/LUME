@@ -65,6 +65,7 @@ export default function ChatHeader({
   }, [selfDestructTime, showOptions]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync pill position with DOM layout
     updateTimerIndicator();
   }, [updateTimerIndicator]);
 

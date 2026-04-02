@@ -109,6 +109,7 @@ export function ChipSelector<T extends string | number | null>({
   }, [options, value]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync pill position with DOM layout
     updateIndicator();
   }, [updateIndicator]);
 
