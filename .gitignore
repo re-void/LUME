@@ -47,6 +47,8 @@ coverage/
 CHANGELOG.md
 CI_HANDOFF.md
 CLAUDE.md
+GEMINI_SECURITY_AUDIT.md
+changelog.txt
 
 # Internal dev scripts (not public)
 server/scripts/
