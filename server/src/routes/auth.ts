@@ -604,7 +604,10 @@ router.post(
       res.status(201).json({ token, expiresAt })
       audit('invite_token_create', { userId, expiresAt })
     } catch (error) {
-      console.error('Create invite token error:', error instanceof Error ? error.message : String(error))
+      console.error(
+        'Create invite token error:',
+        error instanceof Error ? error.message : String(error)
+      )
       res.status(500).json({ error: 'Failed to create invite token' })
     }
   }
@@ -689,7 +692,10 @@ router.put(
       res.json({ ok: true, discoverable })
       audit('discoverable_toggle', { userId, discoverable })
     } catch (error) {
-      console.error('Discoverable toggle error:', error instanceof Error ? error.message : String(error))
+      console.error(
+        'Discoverable toggle error:',
+        error instanceof Error ? error.message : String(error)
+      )
       res.status(500).json({ error: 'Failed to update discoverability' })
     }
   }
