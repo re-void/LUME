@@ -17,6 +17,7 @@ export const UploadFileBodySchema = z.object({
     .string()
     .regex(/^[a-z]+\/[a-z0-9.+-]+$/, 'Invalid MIME type format')
     .optional(),
+  recipientId: UuidSchema.optional(),
 })
 
 // GET /files/:fileId

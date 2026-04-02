@@ -119,18 +119,6 @@ export function decodeMessagePayload(
         }
     }
 
-    const legacy = parsed as LegacyEnvelope;
-    if (typeof legacy.content !== 'string') {
-        return null;
-    }
-
-    if (process.env.NODE_ENV !== 'production') {
-        console.warn('[messagePayload] Legacy plaintext envelope detected — message is not end-to-end encrypted');
-    }
-
-    return {
-        content: legacy.content,
-        timestamp: typeof legacy.timestamp === 'number' ? legacy.timestamp : Date.now(),
-        selfDestruct: legacy.selfDestruct ?? null,
-    };
+    // No plaintext fallback — all messages MUST be encrypted
+    return null;
 }

@@ -44,6 +44,14 @@ const registerRateLimit = rateLimit({
   keyGenerator: (req: Request): string => `ip:${req.ip || '127.0.0.1'}`,
 })
 
+const globalRegisterRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 100, // 100 registrations per hour globally
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (): string => 'global:register',
+})
+
 const usernameCheckRateLimit = rateLimit({
   windowMs: 60 * 1000,
   max: 60,
@@ -117,6 +125,7 @@ function verifySignature(signedPrekey: string, signature: string, identityKey: s
 router.post(
   '/register',
   registerRateLimit,
+  globalRegisterRateLimit,
   validateBody(RegisterBodySchema),
   (req: Request, res: Response) => {
     try {
@@ -299,7 +308,8 @@ router.get(
     try {
       const username = req.params.username!.trim()
       const user = database.getUserByUsername(username)
-      res.json({ available: !user })
+      const isSelf = req.user?.identityKey && user?.identity_key === req.user.identityKey
+      res.json({ available: !user || (!user.discoverable && !isSelf) })
     } catch (error) {
       console.error('Check username error:', error instanceof Error ? error.message : String(error))
       res.status(500).json({ error: 'Failed to check username availability' })

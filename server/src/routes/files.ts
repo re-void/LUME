@@ -85,7 +85,11 @@ router.post(
         return
       }
 
-      const { data, mimeHint } = req.body as { data: string; mimeHint?: string }
+      const { data, mimeHint, recipientId } = req.body as {
+        data: string
+        mimeHint?: string
+        recipientId?: string
+      }
 
       // data is base64-encoded encrypted blob
       const buffer = Buffer.from(data, 'base64')
@@ -107,7 +111,7 @@ router.post(
       }
       await fs.promises.writeFile(filePath, buffer)
 
-      database.createFile(fileId, signerId, buffer.length, safeMime, expiresAt)
+      database.createFile(fileId, signerId, buffer.length, safeMime, expiresAt, recipientId)
 
       res.status(201).json({
         fileId,
@@ -139,6 +143,16 @@ router.get(
       const file = database.getFileById(fileId)
       if (!file) {
         res.status(404).json({ error: 'File not found' })
+        return
+      }
+
+      // Access control: if recipient_id is set, only uploader or recipient may download
+      if (
+        file.recipient_id &&
+        req.user.userId !== file.uploader_id &&
+        req.user.userId !== file.recipient_id
+      ) {
+        res.status(403).json({ error: 'Access denied' })
         return
       }
 
@@ -206,6 +220,16 @@ router.get(
       const file = database.getFileById(fileId)
       if (!file) {
         res.status(404).json({ error: 'File not found' })
+        return
+      }
+
+      // Access control: if recipient_id is set, only uploader or recipient may download
+      if (
+        file.recipient_id &&
+        req.user.userId !== file.uploader_id &&
+        req.user.userId !== file.recipient_id
+      ) {
+        res.status(403).json({ error: 'Access denied' })
         return
       }
 
