@@ -24,6 +24,7 @@ db.pragma('busy_timeout = 3000')
 db.pragma('synchronous = NORMAL')
 db.pragma('cache_size = -64000') // 64MB cache
 db.pragma('temp_store = MEMORY')
+db.pragma('auto_vacuum = INCREMENTAL')
 
 // ==================== Tables ====================
 
@@ -113,6 +114,19 @@ db.exec(`
     FOREIGN KEY (blocker_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (blocked_id) REFERENCES users(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS invite_tokens (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    token TEXT UNIQUE NOT NULL,
+    created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+    expires_at INTEGER NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_invite_tokens_token ON invite_tokens(token);
+  CREATE INDEX IF NOT EXISTS idx_invite_tokens_user ON invite_tokens(user_id);
+  CREATE INDEX IF NOT EXISTS idx_invite_tokens_expires ON invite_tokens(expires_at);
 `)
 
 // ==================== Lightweight migrations ====================
@@ -153,6 +167,17 @@ try {
   }
   if (!colNames.has('avatar_file_id')) {
     db.exec(`ALTER TABLE users ADD COLUMN avatar_file_id TEXT`)
+  }
+} catch {
+  // Acceptable for fresh DBs
+}
+
+// Migration: add discoverable column
+try {
+  const userCols = db.prepare(`PRAGMA table_info(users)`).all() as Array<{ name: string }>
+  const colNames = new Set(userCols.map(c => c.name))
+  if (!colNames.has('discoverable')) {
+    db.exec(`ALTER TABLE users ADD COLUMN discoverable INTEGER NOT NULL DEFAULT 1`)
   }
 } catch {
   // Acceptable for fresh DBs
@@ -355,6 +380,31 @@ const deleteGroup = db.prepare(`
   DELETE FROM groups WHERE id = ?
 `)
 
+const insertInviteToken = db.prepare(`
+  INSERT INTO invite_tokens (id, user_id, token, expires_at)
+  VALUES (?, ?, ?, ?)
+`)
+
+const findInviteByToken = db.prepare(`
+  SELECT * FROM invite_tokens WHERE token = ?
+`)
+
+const deleteExpiredInviteTokens = db.prepare(`
+  DELETE FROM invite_tokens WHERE expires_at < ?
+`)
+
+const deleteUserInviteTokens = db.prepare(`
+  DELETE FROM invite_tokens WHERE user_id = ?
+`)
+
+const countUserInviteTokens = db.prepare(`
+  SELECT COUNT(*) as count FROM invite_tokens WHERE user_id = ?
+`)
+
+const updateDiscoverable = db.prepare(`
+  UPDATE users SET discoverable = ? WHERE id = ?
+`)
+
 export interface FileRecord {
   id: string
   uploader_id: string
@@ -389,8 +439,17 @@ export interface User {
   push_token: string | null
   display_name: string | null
   avatar_file_id: string | null
+  discoverable: number
   created_at: number
   last_seen: number | null
+}
+
+export interface InviteToken {
+  id: string
+  user_id: string
+  token: string
+  created_at: number
+  expires_at: number
 }
 
 export interface PendingMessage {
@@ -641,6 +700,33 @@ export const database = {
   purgeExpiredFiles(nowSec: number): number {
     const result = deleteExpiredFiles.run(nowSec)
     return result.changes
+  },
+
+  // ── Invite Tokens ──
+
+  createInviteToken(id: string, userId: string, token: string, expiresAt: number): void {
+    insertInviteToken.run(id, userId, token, expiresAt)
+  },
+
+  getInviteByToken(token: string): InviteToken | undefined {
+    return findInviteByToken.get(token) as InviteToken | undefined
+  },
+
+  deleteExpiredInviteTokens(nowSec: number): number {
+    return deleteExpiredInviteTokens.run(nowSec).changes
+  },
+
+  deleteUserInviteTokens(userId: string): void {
+    deleteUserInviteTokens.run(userId)
+  },
+
+  getUserInviteTokenCount(userId: string): number {
+    const result = countUserInviteTokens.get(userId) as { count: number }
+    return result.count
+  },
+
+  setDiscoverable(userId: string, discoverable: boolean): void {
+    updateDiscoverable.run(discoverable ? 1 : 0, userId)
   },
 
   // ── Groups ──

@@ -98,52 +98,17 @@ body {
   position: relative;
   overflow-x: hidden;
   color: var(--foreground);
-  background: var(--background);
+  background:
+    radial-gradient(1200px 800px at 12% -10%, rgba(11, 11, 11, 0.06), transparent 60%),
+    radial-gradient(1000px 700px at 110% 20%, rgba(11, 11, 11, 0.04), transparent 55%),
+    var(--background);
 }
 
-/* Animated gradient background — shifts between blue, white, black */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  opacity: 0.18;
-  background: linear-gradient(
-    135deg,
-    #1a1a2e 0%,
-    #16213e 15%,
-    #0f3460 30%,
-    #e2e8f0 50%,
-    #f8fafc 65%,
-    #1a1a2e 80%,
-    #0b0b0b 100%
-  );
-  background-size: 400% 400%;
-  animation: gradientShift 20s ease infinite;
-}
-
-[data-theme="dark"] body::before {
-  opacity: 0.12;
-  background: linear-gradient(
-    135deg,
-    #0a0a1a 0%,
-    #0f1b3d 15%,
-    #1e3a5f 30%,
-    #c8d6e5 50%,
-    #e8edf2 60%,
-    #0f1b3d 75%,
-    #030303 100%
-  );
-  background-size: 400% 400%;
-  animation: gradientShift 20s ease infinite;
-}
-
-@keyframes gradientShift {
-  0% { background-position: 0% 50%; }
-  25% { background-position: 50% 100%; }
-  50% { background-position: 100% 50%; }
-  75% { background-position: 50% 0%; }
-  100% { background-position: 0% 50%; }
+[data-theme="dark"] body {
+  background:
+    radial-gradient(1100px 760px at 18% -10%, rgba(247, 247, 247, 0.07), transparent 60%),
+    radial-gradient(900px 650px at 110% 30%, rgba(247, 247, 247, 0.05), transparent 55%),
+    var(--background);
 }
 
 .auth-shell {
@@ -313,6 +278,20 @@ body::before {
   background: rgba(247, 247, 247, 0.1);
 }
 
+/* Button tap feedback — snappy press response */
+button, .apple-button, .apple-button-secondary {
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.1s ease, opacity 0.1s ease, background-color 0.2s ease, color 0.2s ease;
+}
+button:active, .apple-button:active, .apple-button-secondary:active {
+  transform: scale(0.96);
+  opacity: 0.85;
+}
+.lume-icon-btn:active {
+  transform: scale(0.9);
+  opacity: 0.7;
+}
+
 .apple-link {
   color: var(--text-primary);
   text-decoration: none;
@@ -327,7 +306,7 @@ body::before {
 .message-bubble-sent {
   background: var(--accent);
   color: var(--accent-contrast);
-  border-radius: 18px 18px 6px 18px;
+  border-radius: 18px 18px 4px 18px;
   border: 1px solid var(--border);
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
 }
@@ -335,7 +314,7 @@ body::before {
 .message-bubble-received {
   background: var(--surface-strong);
   color: var(--text-primary);
-  border-radius: 18px 18px 18px 6px;
+  border-radius: 18px 18px 18px 4px;
   border: 1px solid var(--border);
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.06);
 }
@@ -536,6 +515,75 @@ body::before {
   box-shadow: 0 0 0 3px var(--focus-ring), 0 10px 24px rgba(0, 0, 0, 0.6);
 }
 
+/* Modal — blur page content behind modal */
+body.modal-blur-active > *:not([data-modal-portal]) {
+  filter: blur(20px);
+  transition: filter 0.25s ease;
+}
+
+/* Modal backdrop overlay */
+.modal-backdrop-blur {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+/* Modal sheet — glass effect */
+.modal-sheet-glass {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(48px) saturate(1.4);
+  -webkit-backdrop-filter: blur(48px) saturate(1.4);
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="dark"] .modal-sheet-glass {
+  background: rgba(16, 16, 16, 0.72);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Sticky blur header */
+.sticky-blur-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(245, 245, 245, 0.75);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+}
+
+[data-theme="dark"] .sticky-blur-header {
+  background: rgba(10, 10, 10, 0.75);
+}
+
+/* Status dot — online pulse */
+.status-dot-online {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4ADE80;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* Empty state */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 8px;
+  padding: 40px;
+}
+.empty-state-title {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.empty-state-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  opacity: 0.5;
+  text-align: center;
+}
+
 /* Mobile: message action buttons visible on tap (touch devices have no hover) */
 @media (hover: none) and (pointer: coarse) {
   .group .group-hover\:opacity-60 {
@@ -553,12 +601,12 @@ body::before {
 }
 
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(4px); }
+  from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes fadeInScale {
-  from { opacity: 0; transform: scale(0.98) translateY(3px); }
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
   to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
@@ -568,12 +616,12 @@ body::before {
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.96); }
+  from { opacity: 0; transform: scale(0.9); }
   to { opacity: 1; transform: scale(1); }
 }
 
@@ -583,51 +631,97 @@ body::before {
 }
 
 @keyframes messageIn {
-  from { opacity: 0; transform: translateY(2px); }
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes listItemIn {
-  from { opacity: 0; transform: translateX(-3px); }
+  from { opacity: 0; transform: translateX(-8px); }
   to { opacity: 1; transform: translateX(0); }
 }
 
-/* Utility classes — subtle, fast transitions */
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.4); }
+  50% { box-shadow: 0 0 0 5px rgba(74, 222, 128, 0); }
+}
+
+@keyframes dotBounce {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.4); }
+  100% { transform: scale(1); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-10px); }
+  30% { transform: translateX(10px); }
+  45% { transform: translateX(-8px); }
+  60% { transform: translateX(8px); }
+  75% { transform: translateX(-4px); }
+  90% { transform: translateX(4px); }
+}
+
+@keyframes pageEnter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Utility classes */
 .animate-fade-in {
-  animation: fadeIn 0.15s ease-out both;
+  animation: fadeIn 0.3s ease-out both;
 }
 
 .animate-fade-in-up {
-  animation: fadeInUp 0.18s ease-out both;
+  animation: fadeInUp 0.35s ease-out both;
 }
 
 .animate-fade-in-scale {
-  animation: fadeInScale 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: fadeInScale 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .animate-slide-down {
-  animation: slideDown 0.2s ease-out both;
+  animation: slideDown 0.3s ease-out both;
 }
 
 .animate-slide-up {
-  animation: slideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .animate-scale-in {
-  animation: scaleIn 0.12s ease-out both;
+  animation: scaleIn 0.2s ease-out both;
 }
 
 .animate-overlay-in {
-  animation: overlayIn 0.15s ease-out both;
+  animation: overlayIn 0.25s ease-out both;
 }
 
 .animate-message-in {
-  animation: messageIn 0.12s ease-out both;
+  animation: messageIn 0.25s ease-out both;
 }
 
 .animate-list-item-in {
-  animation: listItemIn 0.12s ease-out both;
+  animation: listItemIn 0.25s ease-out both;
 }
+
+/* PIN dot bounce + shake */
+.pin-dot-bounce {
+  animation: dotBounce 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.pin-shake {
+  animation: shake 0.5s ease;
+}
+
+/* Page enter transition */
+.page-enter {
+  animation: pageEnter 0.25s ease;
+}
+
+/* Staggered login animation utility classes */
+.stagger-1 { animation: fadeInUp 0.5s ease 0s both; }
+.stagger-2 { animation: fadeInUp 0.5s ease 0.15s both; }
+.stagger-3 { animation: fadeInUp 0.5s ease 0.25s both; }
+.stagger-4 { animation: fadeInUp 0.5s ease 0.35s both; }
 
 /* Respect user motion preferences */
 @media (prefers-reduced-motion: reduce) {
@@ -639,8 +733,28 @@ body::before {
   .animate-scale-in,
   .animate-overlay-in,
   .animate-message-in,
-  .animate-list-item-in {
+  .animate-list-item-in,
+  .status-dot-online,
+  .pin-dot-bounce,
+  .pin-shake,
+  .page-enter,
+  .stagger-1,
+  .stagger-2,
+  .stagger-3,
+  .stagger-4 {
     animation: none !important;
+  }
+
+  button:active, .apple-button:active, .apple-button-secondary:active,
+  .lume-icon-btn:active {
+    transform: none !important;
+  }
+
+  /* Onboarding scroll sections: show immediately, no slide/fade transition */
+  .onboarding-section {
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
   }
 }
 

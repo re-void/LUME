@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { errorFeedback, successFeedback } from "@/lib/haptics";
 import {
   loadIdentityKeys,
   loadSettings,
@@ -16,13 +17,15 @@ import {
   resetPinFailures,
 } from "@/crypto/storage";
 import { useAuthStore } from "@/stores";
-import { authApi } from "@/lib/api";
+import { authApi, profileApi } from "@/lib/api";
 import { generatePreKeyBundle } from "@/crypto/keys";
 import { checkAndRotateSpk, backfillSpkCreatedAt } from "@/crypto/spkRotation";
 
 export default function UnlockPage() {
   const router = useRouter();
   const setAuth = useAuthStore((s) => s.setAuth);
+
+  const PIN_LENGTH = 6;
 
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
@@ -32,6 +35,21 @@ export default function UnlockPage() {
   const [pendingIdentity, setPendingIdentity] = useState<Awaited<
     ReturnType<typeof loadIdentityKeys>
   > | null>(null);
+  const [shaking, setShaking] = useState(false);
+  const [bouncingDot, setBouncingDot] = useState<number | null>(null);
+  const hiddenInputRef = useRef<HTMLInputElement>(null);
+
+  const focusHiddenInput = useCallback(() => {
+    hiddenInputRef.current?.focus();
+  }, []);
+
+  const handlePinChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/\D/g, "").slice(0, PIN_LENGTH);
+    if (value.length > pin.length) {
+      setBouncingDot(value.length - 1);
+    }
+    setPin(value);
+  }, [pin.length]);
 
   useEffect(() => {
     async function check() {
@@ -60,6 +78,8 @@ export default function UnlockPage() {
         await recordPinFailure();
         const nextAttempts = attempts + 1;
         setAttempts(nextAttempts);
+        errorFeedback();
+        setShaking(true);
         if (nextAttempts >= 5) {
           setError("Too many attempts");
           return;
@@ -84,6 +104,8 @@ export default function UnlockPage() {
 
         if (serverUser) {
           if (serverUser.identityKey !== identity.signing.publicKey) {
+            errorFeedback();
+            setShaking(true);
             setError(
               "This username belongs to a different identity on the server.",
             );
@@ -113,6 +135,8 @@ export default function UnlockPage() {
       }
 
       if (!resolvedUserId || !resolvedUsername) {
+        errorFeedback();
+        setShaking(true);
         setError("Profile missing. Recover account with phrase.");
         return;
       }
@@ -137,11 +161,28 @@ export default function UnlockPage() {
           console.warn("SPK rotation issue during unlock:", spkResult.error);
       }
 
+      successFeedback();
       setAuth(resolvedUserId, resolvedUsername, identity, masterKey);
-      router.push("/chats");
+
+      // Fetch discoverable state
+      void profileApi.get(resolvedUserId, identity).then((profileResult) => {
+        if (profileResult.data?.discoverable !== undefined) {
+          useAuthStore.getState().setDiscoverable(profileResult.data.discoverable);
+        }
+      });
+
+      const pendingInvite = sessionStorage.getItem("lume:pending-invite");
+      if (pendingInvite) {
+        sessionStorage.removeItem("lume:pending-invite");
+        router.push(`/invite/${pendingInvite}`);
+      } else {
+        router.push("/chats");
+      }
     } catch (unlockError) {
       if (process.env.NODE_ENV !== "production")
         console.error("Unlock error:", unlockError);
+      errorFeedback();
+      setShaking(true);
       const msg =
         unlockError instanceof Error ? unlockError.message : "Unlock error";
       setError(msg.startsWith("Too many") ? msg : "Unlock error");
@@ -239,16 +280,46 @@ export default function UnlockPage() {
             >
               PIN
             </label>
+
+            {/* Hidden input captures keyboard/autofill input */}
             <input
+              ref={hiddenInputRef}
               id="unlock-pin"
               type="password"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete="current-password"
               value={pin}
-              onChange={(e) => setPin(e.target.value)}
+              onChange={handlePinChange}
               onKeyDown={handleKeyDown}
-              placeholder="...."
               autoFocus
-              className="apple-input text-center text-[20px] sm:text-2xl tracking-[0.42em]"
+              className="sr-only"
+              aria-label="Enter PIN"
+              maxLength={PIN_LENGTH}
             />
+
+            {/* Visual PIN dots */}
+            <button
+              type="button"
+              onClick={focusHiddenInput}
+              className={`flex items-center justify-center gap-3 w-full py-4 cursor-text${shaking ? " pin-shake" : ""}`}
+              onAnimationEnd={() => setShaking(false)}
+              aria-hidden="true"
+              tabIndex={-1}
+            >
+              {Array.from({ length: PIN_LENGTH }, (_, i) => (
+                <span
+                  key={i}
+                  className={`w-3 h-3 rounded-full transition-colors duration-150 ${
+                    i < pin.length
+                      ? "bg-[var(--accent)]"
+                      : "bg-[var(--border)]"
+                  }${bouncingDot === i ? " pin-dot-bounce" : ""}`}
+                  onAnimationEnd={() => setBouncingDot(null)}
+                />
+              ))}
+            </button>
+
             {error && (
               <p className="mt-3 text-sm text-[var(--text-secondary)] text-center">
                 {error}
@@ -292,7 +363,7 @@ export default function UnlockPage() {
       </div>
 
       {showReRegisterWarning && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xl p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="lume-panel w-full max-w-md rounded-[var(--radius-lg)] border border-[var(--border)] p-6 sm:p-8 shadow-lg">
             <h2 className="text-[14px] font-semibold uppercase tracking-[0.14em] text-[var(--text-primary)] mb-4">
               Account Not Found on Server

@@ -2,6 +2,7 @@
 
 import React from 'react';
 import type { Chat } from '@/stores';
+import { useUIStore } from '@/stores';
 import type { Contact } from '@/crypto/storage';
 import { Avatar } from '@/components/ui';
 
@@ -48,6 +49,9 @@ export default function RightRail({
   onOpenContact: (contactId: string) => void;
   avatarMap?: Record<string, string>;
 }) {
+  const collapsed = useUIStore((s) => s.contactsPanelCollapsed);
+  const setCollapsed = useUIStore((s) => s.setContactsPanelCollapsed);
+
   const contactOrder = [...contacts].sort((a, b) => (b.addedAt ?? 0) - (a.addedAt ?? 0));
 
   const activeContactId = activeChatId
@@ -55,9 +59,29 @@ export default function RightRail({
     : null;
 
   return (
-    <div className="lume-panel h-full min-h-0 rounded-[var(--radius-lg)] border border-[var(--border)] shadow-[var(--shadow-sm)] overflow-hidden">
-      <div className="h-full flex flex-col items-center px-3 pt-5 pb-4">
-        <p className="text-[9px] uppercase tracking-[0.2em] text-[var(--text-muted)] mb-3 flex-shrink-0">Contacts</p>
+    <div
+      className="lume-panel h-full min-h-0 rounded-[var(--radius-lg)] border border-[var(--border)] shadow-[var(--shadow-sm)] overflow-hidden"
+      style={{ transition: 'width 0.2s ease', width: collapsed ? '48px' : undefined }}
+    >
+      <div className="h-full flex flex-col items-center px-3 pt-4 pb-4">
+        <button
+          type="button"
+          onClick={() => setCollapsed(!collapsed)}
+          className="lume-icon-btn w-8 h-8 mb-2 flex-shrink-0"
+          aria-label={collapsed ? 'Expand contacts' : 'Collapse contacts'}
+          title={collapsed ? 'Expand contacts' : 'Collapse contacts'}
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            {collapsed ? (
+              <path d="M9 18l6-6-6-6" />
+            ) : (
+              <path d="M15 18l-6-6 6-6" />
+            )}
+          </svg>
+        </button>
+        {!collapsed && (
+          <p className="text-[9px] uppercase tracking-[0.2em] text-[var(--text-muted)] mb-3 flex-shrink-0">Contacts</p>
+        )}
         <div className="flex-1 min-h-0 overflow-y-auto w-full flex flex-col items-center gap-3 pt-1">
           {contactOrder.map((c) => (
             <AvatarButton
@@ -65,7 +89,7 @@ export default function RightRail({
               contact={c}
               active={activeContactId === c.id}
               onClick={() => onOpenContact(c.id)}
-              avatarUrl={avatarMap?.[c.id]}
+              avatarUrl={collapsed ? undefined : avatarMap?.[c.id]}
             />
           ))}
         </div>

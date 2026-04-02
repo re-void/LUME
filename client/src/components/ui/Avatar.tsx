@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { minidenticon } from "minidenticons";
 
 const SIZE_MAP = {
-  sm: "w-8 h-8 text-[13px]",
-  md: "w-10 h-10 text-[15px]",
-  lg: "w-11 h-11 text-[16px]",
-  xl: "w-24 h-24 text-[32px]",
+  sm: "w-8 h-8",
+  md: "w-10 h-10",
+  lg: "w-11 h-11",
+  xl: "w-24 h-24",
 } as const;
 
 type AvatarSize = keyof typeof SIZE_MAP;
@@ -21,7 +22,11 @@ interface AvatarProps {
 export function Avatar({ src, username, size = "md", className = "" }: AvatarProps) {
   const [imgError, setImgError] = useState(false);
   const sizeClass = SIZE_MAP[size];
-  const letter = (username[0] ?? "L").toUpperCase();
+
+  const identiconSrc = useMemo(() => {
+    const svg = minidenticon(username, 90, 50);
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  }, [username]);
 
   const showImage = src && !imgError;
 
@@ -37,8 +42,12 @@ export function Avatar({ src, username, size = "md", className = "" }: AvatarPro
           onError={() => setImgError(true)}
         />
       ) : (
-        <div className="w-full h-full rounded-full bg-[var(--surface-strong)] border border-[var(--border)] flex items-center justify-center text-[var(--text-primary)] font-semibold">
-          {letter}
+        <div className="w-full h-full rounded-full bg-[var(--surface-strong)] border border-[var(--border)] flex items-center justify-center">
+          <img
+            src={identiconSrc}
+            alt={`${username}'s avatar`}
+            className="w-[70%] h-[70%]"
+          />
         </div>
       )}
     </div>

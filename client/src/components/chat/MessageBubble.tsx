@@ -266,7 +266,7 @@ function MessageBubble({
             </p>
           )}
           <div
-            className={`flex items-center justify-end gap-1.5 mt-1 ${isMine ? "opacity-80" : "text-[var(--text-muted)]"}`}
+            className={`flex items-center justify-end gap-1.5 mt-[3px] opacity-45 ${!isMine ? "text-[var(--text-muted)]" : ""}`}
           >
             <span className="text-[11px] uppercase tracking-[0.06em]">
               {timeLabel}

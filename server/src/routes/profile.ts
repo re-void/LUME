@@ -29,12 +29,13 @@ router.get(
       return
     }
 
-    res.setHeader('Cache-Control', 'private, max-age=300')
+    res.setHeader('Cache-Control', 'private, no-cache')
     res.json({
       id: user.id,
       username: user.username,
       displayName: user.display_name,
       avatarFileId: user.avatar_file_id,
+      discoverable: !!user.discoverable,
     })
   }
 )
@@ -74,6 +75,7 @@ router.put(
       username: user.username,
       displayName: name,
       avatarFileId: avatar,
+      discoverable: !!user.discoverable,
     })
   }
 )

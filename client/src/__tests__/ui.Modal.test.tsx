@@ -61,7 +61,7 @@ describe('Modal', () => {
 
   it('calls onClose when backdrop clicked', () => {
     render(<Modal isOpen onClose={onClose}><p>Body</p></Modal>);
-    const backdrop = document.querySelector('.bg-black\\/60');
+    const backdrop = document.querySelector('.modal-backdrop-blur');
     expect(backdrop).not.toBeNull();
     fireEvent.click(backdrop!);
     expect(onClose).toHaveBeenCalledTimes(1);

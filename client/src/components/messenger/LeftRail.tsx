@@ -58,6 +58,7 @@ export default function LeftRail({ onPanic, onOpenBackup }: { onPanic?: () => vo
   const pathname = usePathname();
   const userId = useAuthStore((s) => s.userId);
   const username = useAuthStore((s) => s.username);
+  const discoverable = useAuthStore((s) => s.discoverable);
   const identityKeys = useAuthStore((s) => s.identityKeys);
   const wsStatus = useUIStore((s) => s.wsStatus);
   const totalUnread = useChatsStore((s) => s.chats.reduce((sum, c) => sum + (c.unreadCount || 0), 0));
@@ -100,10 +101,10 @@ export default function LeftRail({ onPanic, onOpenBackup }: { onPanic?: () => vo
   const statusLabel = wsStatus === 'connected' ? 'Online' : wsStatus === 'connecting' ? 'Connecting' : 'Offline';
   const statusDotClass =
     wsStatus === 'connected'
-      ? 'bg-[var(--accent)]'
+      ? 'status-dot-online'
       : wsStatus === 'connecting'
-        ? 'bg-[var(--text-muted)]'
-        : 'bg-[var(--surface-alt)] border border-[var(--border)]';
+        ? 'w-2 h-2 rounded-full bg-[var(--text-muted)]'
+        : 'w-2 h-2 rounded-full bg-[var(--surface-alt)] border border-[var(--border)]';
 
   return (
     <div className="lume-rail h-full min-h-0 rounded-[var(--radius-lg)] border border-[var(--border)] shadow-[var(--shadow-sm)] overflow-hidden flex flex-col animate-fade-in">
@@ -119,7 +120,7 @@ export default function LeftRail({ onPanic, onOpenBackup }: { onPanic?: () => vo
             L U M E
           </button>
           <span className="lume-status-pill inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] uppercase tracking-[0.16em] text-[var(--text-secondary)]">
-            <span className={`w-2 h-2 rounded-full ${statusDotClass}`} aria-hidden="true" />
+            <span className={statusDotClass} aria-hidden="true" />
             {statusLabel}
           </span>
         </div>
@@ -137,7 +138,7 @@ export default function LeftRail({ onPanic, onOpenBackup }: { onPanic?: () => vo
           </div>
           <div className="mt-4">
             <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--text-muted)]">Profile</p>
-            <p className="mt-1 text-[15px] font-semibold text-[var(--text-primary)]">{username ? `@${username}` : 'Guest'}</p>
+            <p className="mt-1 text-[15px] font-semibold text-[var(--text-primary)]">{!discoverable ? 'Anonymous' : username ? `@${username}` : 'Guest'}</p>
           </div>
         </div>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Modal, Button } from "@/components/ui";
 import { exportEncryptedBackup, importEncryptedBackup } from "@/crypto/storage";
 import { reconcileRestoreConsistency } from "@/lib/settingsConsistency";
@@ -16,23 +16,27 @@ export default function BackupModal({
   onClose,
   masterKey,
 }: BackupModalProps) {
-  const [backupOutput, setBackupOutput] = useState("");
   const [backupStatus, setBackupStatus] = useState<string | null>(null);
   const [backupLoading, setBackupLoading] = useState(false);
-  const [importInput, setImportInput] = useState("");
   const [backupPin, setBackupPin] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const resetState = () => {
+    setBackupPin("");
+    setBackupStatus(null);
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
   return (
     <Modal isOpen={isOpen} onClose={() => {
-      setBackupOutput("");
-      setImportInput("");
-      setBackupPin("");
-      setBackupStatus(null);
+      resetState();
       onClose();
     }} title="Backup & Restore">
       <div className="space-y-4">
         <p className="text-[var(--text-secondary)] text-sm">
-          Export keys/chats/contacts as an encrypted blob. Enter your PIN to
+          Export keys/chats/contacts as an encrypted file. Enter your PIN to
           encrypt/decrypt. Store offline.
         </p>
         <input
@@ -55,15 +59,19 @@ export default function BackupModal({
             setBackupLoading(true);
             try {
               const data = await exportEncryptedBackup(masterKey, backupPin);
-              setBackupOutput(data);
-              await navigator.clipboard
-                .writeText(data)
-                .catch(() => undefined);
+              const blob = new Blob([data], { type: "application/octet-stream" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              const date = new Date().toISOString().split("T")[0];
+              a.download = `lume-backup-${date}.bin`;
+              a.click();
+              URL.revokeObjectURL(url);
               setBackupStatus(
-                "Backup ready (copied to clipboard if allowed).",
+                "Backup downloaded. Save this file in a safe place \u2014 iCloud, Google Drive, or a flash drive. Without it, recovery is impossible."
               );
             } catch (e) {
-              if (process.env.NODE_ENV !== 'production') console.error('Backup export error:', e);
+              if (process.env.NODE_ENV !== "production") console.error("Backup export error:", e);
               setBackupStatus("Backup failed. Check your PIN and try again.");
             } finally {
               setBackupLoading(false);
@@ -73,44 +81,48 @@ export default function BackupModal({
           Export
         </Button>
 
-        {backupOutput && (
-          <textarea
-            className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] text-xs p-3 font-mono"
-            rows={5}
-            readOnly
-            aria-label="Exported backup data"
-            value={backupOutput}
-          />
-        )}
+        <div className="border-t border-[var(--border)]" />
 
         <div className="space-y-2">
-          <textarea
-            className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] text-xs p-3 font-mono"
-            rows={4}
-            placeholder="Paste encrypted backup here"
-            aria-label="Import backup data"
-            value={importInput}
-            onChange={(e) => setImportInput(e.target.value.trim())}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".bin"
+            className="hidden"
+            aria-label="Select backup file"
+            onChange={(e) => {
+              const file = e.target.files?.[0] ?? null;
+              setSelectedFile(file);
+            }}
           />
           <Button
             fullWidth
             variant="secondary"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {selectedFile ? selectedFile.name : "Select backup file"}
+          </Button>
+          <Button
+            fullWidth
+            variant="secondary"
             loading={backupLoading}
-            disabled={!importInput}
+            disabled={!selectedFile}
             onClick={async () => {
               if (!backupPin) {
                 setBackupStatus("Enter your PIN to restore backup.");
                 return;
               }
+              if (!selectedFile) return;
               setBackupStatus(null);
               setBackupLoading(true);
               try {
-                await importEncryptedBackup(importInput, backupPin);
+                const text = await selectedFile.text();
+                await importEncryptedBackup(text, backupPin);
                 await reconcileRestoreConsistency();
                 setBackupStatus("Backup restored. Restart the application.");
               } catch (e) {
-                if (process.env.NODE_ENV !== 'production') console.error('Backup restore error:', e);
-                setBackupStatus("Restore failed. Check your data and PIN.");
+                if (process.env.NODE_ENV !== "production") console.error("Backup restore error:", e);
+                setBackupStatus("Restore failed. Check your file and PIN.");
               } finally {
                 setBackupLoading(false);
               }

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 
 interface ModalProps {
   isOpen: boolean;
@@ -32,11 +33,13 @@ export function Modal({
     if (isOpen) {
       document.addEventListener('keydown', handleEscape);
       document.body.style.overflow = 'hidden';
+      document.body.classList.add('modal-blur-active');
     }
 
     return () => {
       document.removeEventListener('keydown', handleEscape);
       document.body.style.overflow = 'unset';
+      document.body.classList.remove('modal-blur-active');
     };
   }, [isOpen, handleEscape]);
 
@@ -48,9 +51,9 @@ export function Modal({
     lg: 'max-w-lg',
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-xl animate-overlay-in" onClick={onClose} />
+  const modal = (
+    <div data-modal-portal className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="absolute inset-0 modal-backdrop-blur animate-overlay-in" onClick={onClose} />
 
       <div
         role="dialog"
@@ -58,11 +61,14 @@ export function Modal({
         aria-label={title}
         className={`
           relative w-full ${sizes[size]}
-          bg-[var(--surface)] rounded-t-2xl sm:rounded-2xl
+          modal-sheet-glass rounded-t-[20px] sm:rounded-[20px]
           border border-[var(--border)] shadow-[var(--shadow-lg)]
           animate-slide-up
           max-h-[92dvh] flex flex-col
         `}
+        style={{
+          animationTimingFunction: 'cubic-bezier(0.32, 0.72, 0, 1)',
+        }}
       >
         {(title || showCloseButton) && (
           <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-[var(--border)]/70 flex-shrink-0">
@@ -95,6 +101,8 @@ export function Modal({
       </div>
     </div>
   );
+
+  return createPortal(modal, document.body);
 }
 
 export default Modal;

@@ -63,3 +63,19 @@ export const SessionBodySchema = z.object({
 export const BlockBodySchema = z.object({
   blockedId: UuidSchema,
 })
+
+// POST /auth/invite-token
+export const InviteTokenBodySchema = z.object({
+  userId: UuidSchema,
+})
+
+// GET /auth/resolve-invite/:token
+export const InviteTokenParamSchema = z.object({
+  token: z.string().trim().min(1).max(128),
+})
+
+// PUT /auth/discoverable
+export const DiscoverableBodySchema = z.object({
+  userId: UuidSchema,
+  discoverable: z.boolean(),
+})
