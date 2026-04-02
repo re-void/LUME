@@ -34,7 +34,7 @@ export function isWebPushEnabled(): boolean {
  */
 export async function sendPushNotification(
   recipientId: string,
-  senderUsername: string
+  _senderUsername: string
 ): Promise<boolean> {
   if (!ensureInitialized()) return false
 
