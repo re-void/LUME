@@ -27,16 +27,18 @@
 <summary><strong>Features</strong></summary>
 <br>
 
-- End-to-end encrypted messages — the server cannot read them
-- Forward secrecy — compromise of one key doesn't expose past messages
-- Anonymous identity — no phone number, no email, no password
-- Self-destructing messages — auto-delete after a set time
-- Panic wipe — erase all local data in one tap
-- Hidden chats — separate PIN to access private conversations
-- Encrypted file sharing — attachments up to 5 MB, E2E encrypted
-- Group chats — roles, permissions, encrypted for all members
-- Seed phrase backup — recover your identity on any device
-- Offline delivery — messages queue for up to 30 days
+```
+E2E encryption       Messages are encrypted on your device — the server cannot read them
+Forward secrecy       Compromise of one key doesn't expose past messages
+Anonymous identity    No phone number, no email, no password
+Self-destruct         Messages auto-delete after a set time
+Panic wipe            Erase all local data in one tap
+Hidden chats          Separate PIN to access private conversations
+File sharing          Attachments up to 5 MB, end-to-end encrypted
+Group chats           Roles, permissions, encrypted for all members
+Seed phrase           Recover your identity on any device
+Offline delivery      Messages queue for up to 30 days
+```
 
 </details>
 
