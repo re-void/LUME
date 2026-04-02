@@ -17,6 +17,7 @@ const ACCEPTED_TYPES = ["image/png", "image/jpeg", "image/webp"];
 export default function ProfileSection() {
   const userId = useAuthStore((s) => s.userId);
   const username = useAuthStore((s) => s.username);
+  const discoverable = useAuthStore((s) => s.discoverable);
   const identityKeys = useAuthStore((s) => s.identityKeys);
 
   const [displayName, setDisplayName] = useState("");
@@ -241,7 +242,7 @@ export default function ProfileSection() {
               Username
             </label>
             <p className="text-[14px] text-[var(--text-muted)] font-medium">
-              @{username ?? "unknown"}
+              {!discoverable ? "Hidden" : `@${username ?? "unknown"}`}
             </p>
           </div>
         </div>

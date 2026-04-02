@@ -1,4 +1,5 @@
 import React from 'react';
+import { tapFeedback } from '@/lib/haptics';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -16,8 +17,15 @@ export function Button({
   children,
   className = '',
   disabled,
+  onClick,
   ...props
 }: ButtonProps) {
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (variant === 'primary') {
+      tapFeedback();
+    }
+    onClick?.(e);
+  };
   const baseStyles = `
     inline-flex items-center justify-center
     font-semibold uppercase tracking-[0.02em]
@@ -55,6 +63,7 @@ export function Button({
         ${className}
       `}
       disabled={disabled || loading}
+      onClick={handleClick}
       {...props}
     >
       {loading ? (

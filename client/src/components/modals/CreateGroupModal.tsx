@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { Modal, Button, Input } from "@/components/ui";
+import { Avatar } from "@/components/ui/Avatar";
 import { groupsApi } from "@/lib/api";
 import type { GroupData } from "@/lib/api";
 import { useAuthStore, useContactsStore, useGroupsStore } from "@/stores";
@@ -162,11 +163,7 @@ export default function CreateGroupModal({
                         </svg>
                       )}
                     </div>
-                    <div
-                      className="w-8 h-8 rounded-full border border-[var(--border)] bg-[var(--surface)] flex items-center justify-center text-[12px] font-semibold flex-shrink-0"
-                    >
-                      {contact.username[0]!.toUpperCase()}
-                    </div>
+                    <Avatar username={contact.username} size="sm" />
                     <span className="text-[13px] text-[var(--text-primary)] truncate">
                       @{contact.username}
                     </span>

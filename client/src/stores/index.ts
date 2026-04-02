@@ -18,6 +18,8 @@ interface AuthState {
   identityKeys: IdentityKeys | null;
   /** Derived encryption key — never the raw PIN. */
   masterKey: Uint8Array | null;
+  /** Whether this user is discoverable by username. */
+  discoverable: boolean;
 
   // Actions
   setAuth: (
@@ -28,6 +30,7 @@ interface AuthState {
   ) => void;
   clearAuth: () => void;
   setMasterKey: (key: Uint8Array) => void;
+  setDiscoverable: (value: boolean) => void;
 }
 
 // SECURITY: Never persist secret keys in web storage. Keep them in-memory only.
@@ -38,6 +41,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   username: null,
   identityKeys: null,
   masterKey: null,
+  discoverable: true,
 
   setAuth: (userId, username, identityKeys, masterKey) =>
     set({ isAuthenticated: true, userId, username, identityKeys, masterKey }),
@@ -55,10 +59,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       username: null,
       identityKeys: null,
       masterKey: null,
+      discoverable: true,
     });
   },
 
   setMasterKey: (key) => set({ masterKey: key }),
+  setDiscoverable: (value) => set({ discoverable: value }),
 }));
 
 // ==================== Contacts Store ====================
@@ -367,6 +373,7 @@ interface UIState {
     | "rate_limited"
     | "kicked"
     | "auth_error";
+  contactsPanelCollapsed: boolean;
   cryptoBanner: {
     level: "info" | "warning" | "error";
     message: string;
@@ -376,6 +383,7 @@ interface UIState {
   // Actions
   setPanicMode: (active: boolean) => void;
   setShowHiddenChats: (show: boolean) => void;
+  setContactsPanelCollapsed: (collapsed: boolean) => void;
   setOnline: (online: boolean) => void;
   setWsConnected: (connected: boolean) => void;
   setWsStatus: (status: UIState["wsStatus"]) => void;
@@ -389,6 +397,7 @@ interface UIState {
 export const useUIStore = create<UIState>()((set) => ({
   isPanicMode: false,
   showHiddenChats: false,
+  contactsPanelCollapsed: typeof window !== "undefined" && localStorage.getItem("lume:contacts-collapsed") === "true",
   isOnline: true,
   wsConnected: false,
   wsStatus: "disconnected",
@@ -396,6 +405,12 @@ export const useUIStore = create<UIState>()((set) => ({
 
   setPanicMode: (active) => set({ isPanicMode: active }),
   setShowHiddenChats: (show) => set({ showHiddenChats: show }),
+  setContactsPanelCollapsed: (collapsed) => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("lume:contacts-collapsed", String(collapsed));
+    }
+    set({ contactsPanelCollapsed: collapsed });
+  },
   setOnline: (online) => set({ isOnline: online }),
   setWsConnected: (connected) =>
     set({

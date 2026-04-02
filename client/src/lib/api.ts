@@ -347,6 +347,7 @@ export interface ProfileData {
     username: string;
     displayName: string | null;
     avatarFileId: string | null;
+    discoverable?: boolean;
 }
 
 export const profileApi = {
@@ -359,6 +360,37 @@ export const profileApi = {
         const body = data as Record<string, unknown>;
         const headers = signRequest('PUT', `/profile/${userId}`, body, identityKeys);
         return request<ProfileData>(`/profile/${userId}`, {
+            method: 'PUT',
+            body: JSON.stringify(body),
+            headers,
+        });
+    },
+};
+
+// ==================== Invite API ====================
+
+export const inviteApi = {
+    createToken: (userId: string, identityKeys: IdentityKeys) => {
+        const body = { userId };
+        const headers = signRequest('POST', '/auth/invite-token', body, identityKeys);
+        return request<{ token: string; expiresAt: number }>('/auth/invite-token', {
+            method: 'POST',
+            body: JSON.stringify(body),
+            headers,
+        });
+    },
+
+    resolveToken: (token: string, identityKeys: IdentityKeys) => {
+        const headers = signRequest('GET', `/auth/resolve-invite/${token}`, {}, identityKeys);
+        return request<UserBundle & { expiresAt: number }>(`/auth/resolve-invite/${token}`, {
+            headers,
+        });
+    },
+
+    setDiscoverable: (userId: string, discoverable: boolean, identityKeys: IdentityKeys) => {
+        const body = { userId, discoverable };
+        const headers = signRequest('PUT', '/auth/discoverable', body, identityKeys);
+        return request<{ ok: boolean; discoverable: boolean }>('/auth/discoverable', {
             method: 'PUT',
             body: JSON.stringify(body),
             headers,

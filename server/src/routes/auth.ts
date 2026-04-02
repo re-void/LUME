@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express'
 import { v4 as uuidv4 } from 'uuid'
+import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
 import nacl from 'tweetnacl'
 import { decodeBase64 } from 'tweetnacl-util'
@@ -17,6 +18,9 @@ import {
   UserIdParamSchema,
   SessionBodySchema,
   BlockBodySchema,
+  InviteTokenBodySchema,
+  InviteTokenParamSchema,
+  DiscoverableBodySchema,
 } from '../schemas/auth'
 
 const router = Router()
@@ -179,6 +183,13 @@ router.get(
         res.status(404).json({ error: 'User not found' })
         return
       }
+
+      // Non-discoverable users are hidden from username lookup (except self-lookup)
+      const isSelf = req.user?.identityKey === user.identity_key
+      if (!user.discoverable && !isSelf) {
+        res.status(404).json({ error: 'User not found' })
+        return
+      }
       const exchangeIdentityKey = user.exchange_identity_key || user.signed_prekey
 
       const response: GetUserResponse = {
@@ -232,6 +243,13 @@ router.post(
 
       const user = database.getUserByUsername(username)
       if (!user) {
+        res.status(404).json({ error: 'User not found' })
+        return
+      }
+
+      // Non-discoverable users can't be found via username bundle (except self)
+      const isSelfBundle = requester && requester.id === user.id
+      if (!user.discoverable && !isSelfBundle) {
         res.status(404).json({ error: 'User not found' })
         return
       }
@@ -525,5 +543,156 @@ router.get('/blocked', requireSignature, keysRateLimit, (req: Request, res: Resp
     res.status(500).json({ error: 'Failed to retrieve blocked users list' })
   }
 })
+
+// === Invite Tokens ===========================================================
+
+const INVITE_TOKEN_TTL_SEC = 24 * 60 * 60 // 24 hours
+const MAX_INVITE_TOKENS_PER_USER = 5
+
+const inviteRateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request): string => {
+    if (req.user?.userId) return `invite:${req.user.userId}`
+    return `invite:ip:${req.ip || '127.0.0.1'}`
+  },
+})
+
+// POST /auth/invite-token
+router.post(
+  '/invite-token',
+  requireSignature,
+  inviteRateLimit,
+  validateBody(InviteTokenBodySchema),
+  (req: Request, res: Response) => {
+    try {
+      const { userId } = req.body as { userId: string }
+
+      const user = database.getUserById(userId)
+      if (!user) {
+        res.status(404).json({ error: 'User not found' })
+        return
+      }
+
+      if (user.identity_key !== req.user?.identityKey) {
+        res.status(403).json({ error: 'Unauthorized: Identity key mismatch' })
+        return
+      }
+
+      // Enforce per-user token cap
+      const tokenCount = database.getUserInviteTokenCount(userId)
+      if (tokenCount >= MAX_INVITE_TOKENS_PER_USER) {
+        // Clean up expired first, then re-check
+        const nowSec = Math.floor(Date.now() / 1000)
+        database.deleteExpiredInviteTokens(nowSec)
+        const refreshedCount = database.getUserInviteTokenCount(userId)
+        if (refreshedCount >= MAX_INVITE_TOKENS_PER_USER) {
+          res.status(400).json({ error: 'Too many active invite tokens' })
+          return
+        }
+      }
+
+      const id = uuidv4()
+      const token = crypto.randomBytes(16).toString('base64url')
+      const nowSec = Math.floor(Date.now() / 1000)
+      const expiresAt = nowSec + INVITE_TOKEN_TTL_SEC
+
+      database.createInviteToken(id, userId, token, expiresAt)
+
+      res.status(201).json({ token, expiresAt })
+      audit('invite_token_create', { userId, expiresAt })
+    } catch (error) {
+      console.error('Create invite token error:', error instanceof Error ? error.message : String(error))
+      res.status(500).json({ error: 'Failed to create invite token' })
+    }
+  }
+)
+
+// GET /auth/resolve-invite/:token
+router.get(
+  '/resolve-invite/:token',
+  requireSignature,
+  inviteRateLimit,
+  validateParams(InviteTokenParamSchema),
+  (req: Request, res: Response) => {
+    try {
+      const tokenValue = req.params.token!
+
+      const invite = database.getInviteByToken(tokenValue)
+      if (!invite) {
+        res.status(404).json({ error: 'Invite not found or expired' })
+        return
+      }
+
+      const nowSec = Math.floor(Date.now() / 1000)
+      if (invite.expires_at < nowSec) {
+        res.status(410).json({ error: 'Invite token has expired' })
+        return
+      }
+
+      const user = database.getUserById(invite.user_id)
+      if (!user) {
+        res.status(404).json({ error: 'User no longer exists' })
+        return
+      }
+
+      // Prevent resolving your own invite
+      if (req.user?.userId === user.id) {
+        res.status(400).json({ error: 'Cannot resolve your own invite' })
+        return
+      }
+
+      const exchangeIdentityKey = user.exchange_identity_key || user.signed_prekey
+
+      res.json({
+        id: user.id,
+        username: user.username,
+        identityKey: user.identity_key,
+        exchangeKey: exchangeIdentityKey,
+        exchangeIdentityKey,
+        signedPrekey: user.signed_prekey,
+        signedPrekeySignature: user.signed_prekey_signature,
+        expiresAt: invite.expires_at,
+      })
+    } catch (error) {
+      console.error('Resolve invite error:', error instanceof Error ? error.message : String(error))
+      res.status(500).json({ error: 'Failed to resolve invite token' })
+    }
+  }
+)
+
+// PUT /auth/discoverable
+router.put(
+  '/discoverable',
+  requireSignature,
+  keysRateLimit,
+  validateBody(DiscoverableBodySchema),
+  (req: Request, res: Response) => {
+    try {
+      const { userId, discoverable } = req.body as { userId: string; discoverable: boolean }
+
+      const user = database.getUserById(userId)
+      if (!user) {
+        res.status(404).json({ error: 'User not found' })
+        return
+      }
+
+      if (user.identity_key !== req.user?.identityKey) {
+        res.status(403).json({ error: 'Unauthorized: Identity key mismatch' })
+        return
+      }
+
+      database.setDiscoverable(userId, discoverable)
+
+      res.json({ ok: true, discoverable })
+      audit('discoverable_toggle', { userId, discoverable })
+    } catch (error) {
+      console.error('Discoverable toggle error:', error instanceof Error ? error.message : String(error))
+      res.status(500).json({ error: 'Failed to update discoverability' })
+    }
+  }
+)
 
 export default router

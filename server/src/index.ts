@@ -255,6 +255,15 @@ const sigCleanupTimer = setInterval(
 )
 sigCleanupTimer.unref()
 
+// Purge expired invite tokens every 10 minutes
+const inviteCleanupTimer = setInterval(() => {
+  const purgedInvites = database.deleteExpiredInviteTokens(Math.floor(Date.now() / 1000))
+  if (purgedInvites > 0) {
+    console.log(`Purged ${purgedInvites} expired invite token(s)`)
+  }
+}, 10 * 60 * 1000)
+inviteCleanupTimer.unref()
+
 // Graceful shutdown
 const SHUTDOWN_TIMEOUT_MS = 5000
 

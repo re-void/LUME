@@ -5,8 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   createAccountWithMnemonic,
   getMnemonicWords,
-  getRandomWordPositions,
-  verifyMnemonicWords,
 } from "@/crypto/mnemonic";
 import {
   saveIdentityKeys,
@@ -21,13 +19,13 @@ import { authApi } from "@/lib/api";
 import { useAuthStore } from "@/stores";
 import type { IdentityKeys } from "@/crypto/keys";
 
-type Step = "generate" | "backup" | "verify" | "username" | "pin" | "complete";
+type Step = "username" | "pin" | "generate" | "save-seed" | "complete";
 
 export default function SetupPage() {
   const router = useRouter();
   const setAuth = useAuthStore((s) => s.setAuth);
 
-  const [step, setStep] = useState<Step>("generate");
+  const [step, setStep] = useState<Step>("username");
   const [mnemonic, setMnemonic] = useState<string>("");
   const [identity, setIdentity] = useState<IdentityKeys | null>(null);
   const [username, setUsername] = useState("");
@@ -35,9 +33,6 @@ export default function SetupPage() {
   const [pin, setPin] = useState("");
   const [pinConfirm, setPinConfirm] = useState("");
   const [pinError, setPinError] = useState("");
-  const [verifyPositions, setVerifyPositions] = useState<number[]>([]);
-  const [verifyAnswers, setVerifyAnswers] = useState<string[]>(["", "", ""]);
-  const [verifyError, setVerifyError] = useState("");
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [canProceed, setCanProceed] = useState(false);
@@ -46,7 +41,7 @@ export default function SetupPage() {
   );
 
   useEffect(() => {
-    if (step === "backup") {
+    if (step === "save-seed") {
       setCanProceed(false);
       const timer = setTimeout(() => setCanProceed(true), 3000);
       return () => clearTimeout(timer);
@@ -54,17 +49,6 @@ export default function SetupPage() {
 
     return undefined;
   }, [step]);
-
-  useEffect(() => {
-    async function generate() {
-      const result = await createAccountWithMnemonic(128);
-      setMnemonic(result.mnemonic);
-      setIdentity(result.identity);
-      setStep("backup");
-    }
-
-    generate();
-  }, []);
 
   const handleCopyMnemonic = async () => {
     await navigator.clipboard.writeText(mnemonic);
@@ -74,23 +58,14 @@ export default function SetupPage() {
     setTimeout(() => navigator.clipboard.writeText("").catch(() => {}), 15000);
   };
 
-  const handleConfirmBackup = () => {
-    const positions = getRandomWordPositions(
-      getMnemonicWords(mnemonic).length,
-      3,
-    );
-    setVerifyPositions(positions);
-    setStep("verify");
-  };
-
-  const handleVerify = () => {
-    const valid = verifyMnemonicWords(mnemonic, verifyPositions, verifyAnswers);
-    if (valid) {
-      setVerifyError("");
-      setStep("username");
-    } else {
-      setVerifyError("Invalid words");
-    }
+  const handleDownloadRecovery = () => {
+    const blob = new Blob([mnemonic], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "lume-recovery.txt";
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const checkUsername = (value: string) => {
@@ -132,24 +107,28 @@ export default function SetupPage() {
     }
 
     setPinError("");
-    void handleComplete();
+    setStep("generate");
+    void handleGenerate();
   };
 
-  const handleComplete = async () => {
-    if (!identity) return;
-
+  const handleGenerate = async () => {
     setLoading(true);
     try {
+      const result = await createAccountWithMnemonic(128);
+      const generatedIdentity = result.identity;
+      setMnemonic(result.mnemonic);
+      setIdentity(generatedIdentity);
+
       const preKeyBundle = generatePreKeyBundle(
-        identity.exchange,
-        identity.signing,
+        generatedIdentity.exchange,
+        generatedIdentity.signing,
         20,
       );
 
       const { data, error } = await authApi.register({
         username,
-        identityKey: identity.signing.publicKey,
-        exchangeIdentityKey: identity.exchange.publicKey,
+        identityKey: generatedIdentity.signing.publicKey,
+        exchangeIdentityKey: generatedIdentity.exchange.publicKey,
         signedPrekey: preKeyBundle.signedPreKey.publicKey,
         signedPrekeySignature: preKeyBundle.signature,
         oneTimePrekeys: preKeyBundle.oneTimePreKeys.map((key, i) => ({
@@ -159,7 +138,9 @@ export default function SetupPage() {
       });
 
       if (error) {
-        throw new Error(error);
+        setUsernameError(error);
+        setStep("username");
+        return;
       }
 
       // Derive master key from PIN — PIN is only used here, never stored
@@ -175,7 +156,7 @@ export default function SetupPage() {
         masterKey,
       );
 
-      await saveIdentityKeys(identity, masterKey);
+      await saveIdentityKeys(generatedIdentity, masterKey);
       await savePinHash(pin);
       const existingSettings = await loadSettings();
       await saveSettings({
@@ -183,43 +164,50 @@ export default function SetupPage() {
         username,
         userId: data!.id,
       });
-      setAuth(data!.id, username, identity, masterKey);
-      setMnemonic("");
-      setStep("complete");
-
-      setTimeout(() => {
-        router.push("/chats");
-      }, 1800);
+      setAuth(data!.id, username, generatedIdentity, masterKey);
+      setStep("save-seed");
     } catch (registrationError) {
       if (process.env.NODE_ENV !== "production")
         console.error("Registration error:", registrationError);
       setUsernameError("Registration error");
+      setStep("username");
     } finally {
       setLoading(false);
     }
   };
 
+  const handleSaveSeedContinue = () => {
+    setMnemonic("");
+    setStep("complete");
+    setTimeout(() => {
+      const pendingInvite = sessionStorage.getItem("lume:pending-invite");
+      if (pendingInvite) {
+        sessionStorage.removeItem("lume:pending-invite");
+        router.push(`/invite/${pendingInvite}`);
+      } else {
+        router.push("/chats");
+      }
+    }, 1800);
+  };
+
   const words = getMnemonicWords(mnemonic);
-  const steps = ["backup", "verify", "username", "pin"] as const;
+  const steps = ["username", "pin", "generate", "save-seed"] as const;
   const currentStepIndex = steps.indexOf(step as (typeof steps)[number]);
 
   return (
     <main className="auth-shell">
       <div className="w-full max-w-xl px-0">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-semibold tracking-[0.28em] uppercase text-[var(--text-primary)]">
+          <h1 className="stagger-1 text-2xl font-semibold tracking-[0.28em] uppercase text-[var(--text-primary)]">
             L U M E
           </h1>
-          <p className="auth-subtle mt-2">
-            Secure registration with recovery phrase and PIN.
-          </p>
-          <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
+          <p className="stagger-2 auth-subtle mt-2">Secure registration</p>
+          <div className="stagger-3 mt-4 flex items-center justify-center gap-2 flex-wrap">
             <span className="lume-badge">Create account</span>
-            <span className="lume-badge">Recovery phrase</span>
           </div>
         </div>
 
-        <div className="auth-card lume-panel p-5 sm:p-8 animate-fade-in-scale">
+        <div className="stagger-4 auth-card lume-panel p-5 sm:p-8">
           {step !== "generate" && step !== "complete" && (
             <div className="mb-8">
               <div className="h-1.5 bg-[var(--surface-alt)] rounded-full overflow-hidden">
@@ -229,120 +217,6 @@ export default function SetupPage() {
                     width: `${((currentStepIndex + 1) / steps.length) * 100}%`,
                   }}
                 />
-              </div>
-            </div>
-          )}
-
-          {step === "generate" && (
-            <div className="text-center py-10" aria-busy="true">
-              <div className="w-10 h-10 mx-auto mb-6 border-2 mono-spinner rounded-full animate-spin" />
-              <p className="text-[var(--text-secondary)] text-sm">
-                Generating keys...
-              </p>
-            </div>
-          )}
-
-          {step === "backup" && (
-            <div>
-              <div className="text-center mb-8">
-                <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-2 uppercase tracking-[0.04em]">
-                  Recovery Phrase
-                </h2>
-                <p className="text-[var(--text-secondary)] text-sm">
-                  Save this phrase offline. It cannot be restored by server.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-8">
-                {words.map((word, index) => (
-                  <div
-                    key={word + index}
-                    className="rounded-[16px] border border-[var(--border)] bg-[var(--surface-strong)] px-3 py-2 text-center shadow-[0_6px_14px_rgba(0,0,0,0.06)]"
-                  >
-                    <span className="text-[11px] text-[var(--text-muted)] mr-1">
-                      {index + 1}.
-                    </span>
-                    <span className="text-sm font-medium text-[var(--text-primary)]">
-                      {word}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="space-y-3">
-                <button
-                  onClick={handleCopyMnemonic}
-                  className={`w-full apple-button-secondary ${copied ? "bg-[var(--accent)] text-[var(--accent-contrast)]" : ""}`}
-                >
-                  {copied ? "Copied" : "Copy Phrase"}
-                </button>
-                <button
-                  onClick={handleConfirmBackup}
-                  disabled={!canProceed}
-                  className="w-full apple-button disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  I saved the phrase
-                </button>
-              </div>
-            </div>
-          )}
-
-          {step === "verify" && (
-            <div>
-              <div className="text-center mb-8">
-                <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-2 uppercase tracking-[0.04em]">
-                  Verify Phrase
-                </h2>
-                <p className="text-[var(--text-secondary)] text-sm">
-                  Type requested words to continue.
-                </p>
-              </div>
-
-              <div className="space-y-5 mb-8">
-                {verifyPositions.map((pos, index) => (
-                  <div key={pos}>
-                    <label
-                      htmlFor={`verify-word-${pos}`}
-                      className="block text-xs uppercase tracking-[0.08em] text-[var(--text-muted)] mb-2"
-                    >
-                      Word #{pos + 1}
-                    </label>
-                    <input
-                      id={`verify-word-${pos}`}
-                      type="text"
-                      value={verifyAnswers[index]}
-                      onChange={(e) => {
-                        const newAnswers = [...verifyAnswers];
-                        newAnswers[index] = e.target.value.toLowerCase();
-                        setVerifyAnswers(newAnswers);
-                      }}
-                      placeholder="Type word"
-                      className="apple-input"
-                    />
-                  </div>
-                ))}
-              </div>
-
-              {verifyError && (
-                <p className="text-sm text-[var(--text-secondary)] text-center mb-6">
-                  {verifyError}
-                </p>
-              )}
-
-              <div className="space-y-3">
-                <button
-                  onClick={handleVerify}
-                  disabled={verifyAnswers.some((a) => !a)}
-                  className="w-full apple-button disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Confirm
-                </button>
-                <button
-                  onClick={() => setStep("backup")}
-                  className="w-full apple-button-secondary"
-                >
-                  Show phrase again
-                </button>
               </div>
             </div>
           )}
@@ -445,18 +319,75 @@ export default function SetupPage() {
 
               <button
                 onClick={handleSetPin}
-                disabled={!pin || !pinConfirm || loading}
+                disabled={!pin || !pinConfirm}
                 className="w-full apple-button disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="w-5 h-5 border-2 mono-spinner rounded-full animate-spin" />
-                    Creating...
-                  </span>
-                ) : (
-                  "Create Account"
-                )}
+                Continue
               </button>
+            </div>
+          )}
+
+          {step === "generate" && (
+            <div className="text-center py-10" aria-busy="true">
+              <div className="w-10 h-10 mx-auto mb-6 border-2 mono-spinner rounded-full animate-spin" />
+              <p className="text-[var(--text-secondary)] text-sm">
+                Creating account...
+              </p>
+            </div>
+          )}
+
+          {step === "save-seed" && (
+            <div className="page-enter">
+              <div className="text-center mb-8">
+                <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-2 uppercase tracking-[0.04em]">
+                  Save your recovery key
+                </h2>
+                <p className="text-[var(--text-secondary)] text-sm">
+                  Without it, account recovery is impossible.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-8">
+                {words.map((word, index) => (
+                  <div
+                    key={word + index}
+                    className="rounded-[16px] border border-[var(--border)] bg-[var(--surface-strong)] px-3 py-2 text-center shadow-[0_6px_14px_rgba(0,0,0,0.06)]"
+                  >
+                    <span className="text-[11px] text-[var(--text-muted)] mr-1">
+                      {index + 1}.
+                    </span>
+                    <span className="text-sm font-medium text-[var(--text-primary)]">
+                      {word}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={handleDownloadRecovery}
+                    className="apple-button-secondary"
+                    aria-label="Download recovery phrase as text file"
+                  >
+                    Download
+                  </button>
+                  <button
+                    onClick={handleCopyMnemonic}
+                    className={`apple-button-secondary ${copied ? "bg-[var(--accent)] text-[var(--accent-contrast)]" : ""}`}
+                    aria-label="Copy recovery phrase to clipboard"
+                  >
+                    {copied ? "Copied" : "Copy"}
+                  </button>
+                </div>
+                <button
+                  onClick={handleSaveSeedContinue}
+                  disabled={!canProceed}
+                  className="w-full apple-button disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  I saved it
+                </button>
+              </div>
             </div>
           )}
 
@@ -487,7 +418,7 @@ export default function SetupPage() {
           )}
         </div>
 
-        {(step === "backup" || step === "verify") && (
+        {(step === "username" || step === "pin") && (
           <div className="mt-6 text-center">
             <button
               onClick={() => router.push("/")}

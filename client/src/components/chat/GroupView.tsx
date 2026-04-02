@@ -5,6 +5,7 @@ import { groupsApi } from "@/lib/api";
 import type { GroupData } from "@/lib/api";
 import { useAuthStore, useGroupsStore } from "@/stores";
 import { Button } from "@/components/ui";
+import { Avatar } from "@/components/ui/Avatar";
 import AddMemberModal from "@/components/modals/AddMemberModal";
 
 interface GroupViewProps {
@@ -141,9 +142,7 @@ export default function GroupView({ group }: GroupViewProps) {
                   key={member.user_id}
                   className="px-4 py-3 flex items-center gap-3 border-b border-[var(--border)]/40 last:border-b-0"
                 >
-                  <div className="w-9 h-9 rounded-full border border-[var(--border)] bg-[var(--surface)] flex items-center justify-center text-[12px] font-semibold flex-shrink-0">
-                    {member.username[0]!.toUpperCase()}
-                  </div>
+                  <Avatar username={member.username} size="sm" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-[13px] text-[var(--text-primary)] truncate">

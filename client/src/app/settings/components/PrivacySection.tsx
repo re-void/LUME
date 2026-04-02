@@ -1,11 +1,12 @@
 /**
  * Settings — Privacy section:
- * self-destruct timer, hidden chats toggle, hidden PIN modals.
+ * self-destruct timer, discoverable toggle + invite tokens, hidden chats toggle, hidden PIN modals.
  */
 
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import QRCode from "qrcode";
 import { Button, Input, Modal } from "@/components/ui";
 import type { Settings } from "@/crypto/storage";
 import {
@@ -14,8 +15,11 @@ import {
   verifyHiddenChatPin,
   deriveMasterKeyFromPin,
 } from "@/crypto/storage";
-import { useChatsStore, useUIStore } from "@/stores";
+import { useAuthStore, useChatsStore, useUIStore } from "@/stores";
+import { inviteApi, profileApi } from "@/lib/api";
 import { SectionHeading, ChipSelector, ToggleRow } from "./shared";
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
 const SELF_DESTRUCT_OPTIONS: { label: string; value: number | null }[] = [
   { label: "Off", value: null },
@@ -47,6 +51,110 @@ export default function PrivacySection({
   const setChats = useChatsStore((s) => s.setChats);
   const setShowHiddenChats = useUIStore((s) => s.setShowHiddenChats);
 
+  // Discoverable / invite state — fetch real value on mount
+  const [discoverable, setDiscoverable] = useState<boolean | null>(null);
+  const [inviteToken, setInviteToken] = useState<string | null>(null);
+  const [inviteExpiresAt, setInviteExpiresAt] = useState<number | null>(null);
+  const [inviteQrDataUrl, setInviteQrDataUrl] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState("");
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  // Fetch discoverable state from server on mount
+  useEffect(() => {
+    const { userId, identityKeys } = useAuthStore.getState();
+    if (!userId || !identityKeys) return;
+    let cancelled = false;
+    void profileApi.get(userId, identityKeys).then((result) => {
+      if (cancelled) return;
+      if (result.data) {
+        setDiscoverable(result.data.discoverable ?? true);
+      }
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleToggleDiscoverable = useCallback(async (enabled: boolean) => {
+    const { userId, identityKeys } = useAuthStore.getState();
+    if (!userId || !identityKeys) return;
+    const result = await inviteApi.setDiscoverable(userId, enabled, identityKeys);
+    if (result.data) {
+      setDiscoverable(result.data.discoverable);
+      useAuthStore.getState().setDiscoverable(result.data.discoverable);
+      if (enabled) {
+        setInviteToken(null);
+        setInviteExpiresAt(null);
+        setInviteQrDataUrl(null);
+      }
+    }
+  }, []);
+
+  const handleGenerateInvite = useCallback(async () => {
+    const { userId, identityKeys } = useAuthStore.getState();
+    if (!userId || !identityKeys) return;
+    setInviteLoading(true);
+    try {
+      const result = await inviteApi.createToken(userId, identityKeys);
+      if (result.data) {
+        setInviteToken(result.data.token);
+        setInviteExpiresAt(result.data.expiresAt);
+        const link = `${APP_URL}/invite/${result.data.token}`;
+        const qr = await QRCode.toDataURL(link, {
+          width: 200,
+          margin: 2,
+          color: { dark: "#000000", light: "#ffffff" },
+        });
+        setInviteQrDataUrl(qr);
+      }
+    } finally {
+      setInviteLoading(false);
+    }
+  }, []);
+
+  const handleCopyInviteLink = useCallback(() => {
+    if (!inviteToken) return;
+    const link = `${APP_URL}/invite/${inviteToken}`;
+    void navigator.clipboard.writeText(link);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [inviteToken]);
+
+  // Countdown timer for invite token expiry
+  useEffect(() => {
+    if (!inviteExpiresAt) {
+      setCountdown("");
+      return;
+    }
+
+    const tick = () => {
+      const remaining = inviteExpiresAt - Math.floor(Date.now() / 1000);
+      if (remaining <= 0) {
+        setCountdown("Expired");
+        setInviteToken(null);
+        setInviteExpiresAt(null);
+        setInviteQrDataUrl(null);
+        return;
+      }
+
+      if (remaining <= 5 && !inviteLoading) {
+        void handleGenerateInvite();
+        return;
+      }
+
+      const h = Math.floor(remaining / 3600);
+      const m = Math.floor((remaining % 3600) / 60);
+      const s = remaining % 60;
+      setCountdown(
+        h > 0 ? `${h}h ${m}m ${s}s` : m > 0 ? `${m}m ${s}s` : `${s}s`,
+      );
+    };
+
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [inviteExpiresAt, inviteLoading, handleGenerateInvite]);
+
+  // Hidden chats state
   const [showHiddenPinModal, setShowHiddenPinModal] = useState(false);
   const [hiddenPinMode, setHiddenPinMode] = useState<HiddenPinMode>("setup");
   const [hiddenCurrentPin, setHiddenCurrentPin] = useState("");
@@ -180,6 +288,73 @@ export default function PrivacySection({
             onChange={(v) => onUpdate("selfDestructDefault", v)}
           />
         </div>
+
+        <ToggleRow
+          label="Discoverable by username"
+          description="When off, others can only find you via invite link"
+          checked={discoverable ?? true}
+          onChange={(v) => void handleToggleDiscoverable(v)}
+        />
+
+        {discoverable === false ? (
+          <div
+            className="rounded-xl p-4 mb-4"
+            style={{ background: "var(--surface-secondary)" }}
+          >
+            <p className="text-[12px] text-[var(--text-muted)] mb-3">
+              Share this link so others can add you
+            </p>
+
+            {!inviteToken ? (
+              <Button
+                onClick={() => void handleGenerateInvite()}
+                disabled={inviteLoading}
+                className="w-full"
+              >
+                {inviteLoading ? "Generating..." : "Generate invite link"}
+              </Button>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 min-w-0 truncate text-[12px] text-[var(--text-secondary)] font-mono">
+                    {`${APP_URL}/invite/${inviteToken}`}
+                  </code>
+                  <Button
+                    onClick={handleCopyInviteLink}
+                    className="shrink-0 text-[12px]"
+                  >
+                    {copied ? "Copied!" : "Copy"}
+                  </Button>
+                </div>
+
+                <p className="text-[12px] text-[var(--text-muted)] text-center">
+                  Expires in {countdown}
+                </p>
+
+                {inviteQrDataUrl ? (
+                  <div className="flex justify-center">
+                    <img
+                      src={inviteQrDataUrl}
+                      alt="Invite QR code"
+                      width={180}
+                      height={180}
+                      className="rounded-lg"
+                      style={{ background: "#ffffff" }}
+                    />
+                  </div>
+                ) : null}
+
+                <Button
+                  onClick={() => void handleGenerateInvite()}
+                  disabled={inviteLoading}
+                  className="w-full"
+                >
+                  {inviteLoading ? "Generating..." : "Generate new"}
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : null}
 
         <ToggleRow
           label="Hidden Chats"

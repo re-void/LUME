@@ -478,11 +478,7 @@ export default function ChatListPanel({
             <input
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              placeholder={
-                activeTab === 'chats'
-                  ? (modeScopedChats.length > 0 ? 'Search...' : 'No chats yet')
-                  : (groups.length > 0 ? 'Search groups...' : 'No groups yet')
-              }
+              placeholder={activeTab === 'chats' ? 'Search...' : 'Search groups...'}
               disabled={activeTab === 'chats' ? modeScopedChats.length === 0 : groups.length === 0}
               aria-label={activeTab === 'chats' ? 'Search chats' : 'Search groups'}
               className="apple-input apple-input-icon disabled:opacity-60 disabled:cursor-not-allowed"
@@ -492,6 +488,27 @@ export default function ChatListPanel({
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto">
+        {activeTab === 'chats' && filtered.length === 0 && modeScopedChats.length === 0 ? (
+          <div className="empty-state">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.2 }}>
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <p className="empty-state-title">No chats yet</p>
+            <p className="empty-state-subtitle">Start a private conversation</p>
+          </div>
+        ) : activeTab === 'groups' && filteredGroups.length === 0 && groups.length === 0 ? (
+          <div className="empty-state">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.2 }}>
+              <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 00-3-3.87"/>
+              <path d="M16 3.13a4 4 0 010 7.75"/>
+            </svg>
+            <p className="empty-state-title">No groups yet</p>
+            <p className="empty-state-subtitle">Create a group to chat together</p>
+          </div>
+        ) : (
         <div className="py-1">
           {activeTab === 'chats' ? (
             filtered.map((chat, i) => {
@@ -524,6 +541,7 @@ export default function ChatListPanel({
             ))
           )}
         </div>
+        )}
       </div>
 
       <Modal

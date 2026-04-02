@@ -11,6 +11,11 @@ export default function HomePage() {
   const [accountExists, setAccountExists] = useState(false);
 
   useEffect(() => {
+    if (!localStorage.getItem("lume:onboarding-complete")) {
+      router.push("/onboarding");
+      return;
+    }
+
     async function checkAccount() {
       const exists = await hasAccount();
       setAccountExists(exists);
@@ -18,7 +23,7 @@ export default function HomePage() {
     }
 
     checkAccount();
-  }, []);
+  }, [router]);
 
   if (checking) {
     return (

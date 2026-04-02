@@ -109,6 +109,30 @@ export const ProfileDataSchema = z.object({
   username: UsernameSchema,
   displayName: z.string().nullable(),
   avatarFileId: z.string().nullable(),
+  discoverable: z.boolean().optional(),
+})
+
+// ── Invite token responses ──────────────────────────────────
+
+export const InviteTokenResponseSchema = z.object({
+  token: z.string().min(1),
+  expiresAt: z.number().positive(),
+})
+
+export const ResolveInviteResponseSchema = z.object({
+  id: UuidSchema,
+  username: UsernameSchema,
+  identityKey: Base64KeySchema,
+  exchangeKey: Base64KeySchema.optional(),
+  exchangeIdentityKey: Base64KeySchema.optional(),
+  signedPrekey: Base64KeySchema,
+  signedPrekeySignature: Base64KeySchema,
+  expiresAt: z.number().positive(),
+})
+
+export const DiscoverableResponseSchema = z.object({
+  ok: z.boolean(),
+  discoverable: z.boolean(),
 })
 
 // ── WebSocket messages ──────────────────────────────────────
