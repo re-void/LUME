@@ -48,6 +48,11 @@ router.post(
       return
     }
 
+    if (user.identity_key !== req.user?.identityKey) {
+      res.status(403).json({ error: 'Forbidden' })
+      return
+    }
+
     database.setPushToken(userId, JSON.stringify(subscription))
     res.json({ ok: true })
   }
@@ -65,6 +70,11 @@ router.post(
     const user = database.getUserById(userId)
     if (!user) {
       res.status(404).json({ error: 'User not found' })
+      return
+    }
+
+    if (user.identity_key !== req.user?.identityKey) {
+      res.status(403).json({ error: 'Forbidden' })
       return
     }
 

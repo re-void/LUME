@@ -172,8 +172,8 @@ describe('encodeMessagePayload / decodeMessagePayload', () => {
 
 // ── Backward compatibility: legacy envelope ──────────────────────────────────
 
-describe('backward compatibility — legacy envelope', () => {
-  it('decodes legacy plaintext envelope with content field', () => {
+describe('legacy plaintext rejection (security fix)', () => {
+  it('rejects legacy plaintext envelope — no E2EE bypass', () => {
     const legacy = JSON.stringify({
       content: 'Old message format',
       timestamp: 1700000000000,
@@ -181,30 +181,19 @@ describe('backward compatibility — legacy envelope', () => {
     });
 
     const decoded = decodeMessagePayload(legacy, 'unused_key');
-
-    expect(decoded).not.toBeNull();
-    expect(decoded!.content).toBe('Old message format');
-    expect(decoded!.timestamp).toBe(1700000000000);
-    expect(decoded!.selfDestruct).toBe(60);
+    expect(decoded).toBeNull();
   });
 
-  it('decodes legacy envelope without timestamp', () => {
+  it('rejects legacy envelope without encryption', () => {
     const legacy = JSON.stringify({ content: 'No timestamp' });
 
     const decoded = decodeMessagePayload(legacy, 'unused_key');
-
-    expect(decoded).not.toBeNull();
-    expect(decoded!.content).toBe('No timestamp');
-    expect(decoded!.timestamp).toBeGreaterThan(0); // defaults to Date.now()
+    expect(decoded).toBeNull();
   });
 
-  it('reads selfDestruct from old envelope.selfDestruct for backward compat', () => {
-    // In old format, selfDestruct was on the outer envelope, not inside encrypted payload
-    const { sender, recipient } = makeKeyPairs();
+  it('rejects unencrypted envelope with selfDestruct', () => {
+    const { recipient } = makeKeyPairs();
 
-    // Create a v1 envelope but with selfDestruct on the outside (old behavior)
-    // The current encodeMessagePayload puts it inside, but a receiver should
-    // handle both locations
     const oldEnvelope = JSON.stringify({
       content: 'legacy self-destruct',
       timestamp: Date.now(),
@@ -212,8 +201,7 @@ describe('backward compatibility — legacy envelope', () => {
     });
 
     const decoded = decodeMessagePayload(oldEnvelope, recipient.secretKey);
-    expect(decoded).not.toBeNull();
-    expect(decoded!.selfDestruct).toBe(120);
+    expect(decoded).toBeNull();
   });
 });
 

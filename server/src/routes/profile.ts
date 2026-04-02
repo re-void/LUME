@@ -29,6 +29,11 @@ router.get(
       return
     }
 
+    if (!user.discoverable && req.user?.identityKey !== user.identity_key) {
+      res.status(404).json({ error: 'User not found' })
+      return
+    }
+
     res.setHeader('Cache-Control', 'private, no-cache')
     res.json({
       id: user.id,

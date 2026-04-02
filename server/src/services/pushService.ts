@@ -30,11 +30,11 @@ export function isWebPushEnabled(): boolean {
 
 /**
  * Send a push notification to a user (if they have a subscription).
- * Never includes message content — only sender username for privacy.
+ * Never includes message content or sender identity — generic notification only.
  */
 export async function sendPushNotification(
   recipientId: string,
-  senderUsername: string
+  _senderUsername: string
 ): Promise<boolean> {
   if (!ensureInitialized()) return false
 
@@ -50,8 +50,8 @@ export async function sendPushNotification(
 
   const payload = JSON.stringify({
     title: 'LUME',
-    body: `New message from ${senderUsername}`,
-    tag: `lume-msg-${senderUsername}`,
+    body: 'You have a new message',
+    tag: 'lume-new-message',
   })
 
   try {

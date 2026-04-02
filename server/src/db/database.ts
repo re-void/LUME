@@ -183,6 +183,17 @@ try {
   // Acceptable for fresh DBs
 }
 
+// Migration: add recipient_id column to files for access control
+try {
+  const fileCols = db.prepare(`PRAGMA table_info(files)`).all() as Array<{ name: string }>
+  const fileColNames = new Set(fileCols.map(c => c.name))
+  if (!fileColNames.has('recipient_id')) {
+    db.exec(`ALTER TABLE files ADD COLUMN recipient_id TEXT DEFAULT NULL`)
+  }
+} catch {
+  // Acceptable for fresh DBs
+}
+
 // ==================== Prepared Statements ====================
 
 const insertUser = db.prepare(`
@@ -332,8 +343,8 @@ const getBlockedByUser = db.prepare(`
 `)
 
 const insertFile = db.prepare(`
-  INSERT INTO files (id, uploader_id, size, mime_hint, expires_at)
-  VALUES (?, ?, ?, ?, ?)
+  INSERT INTO files (id, uploader_id, size, mime_hint, expires_at, recipient_id)
+  VALUES (?, ?, ?, ?, ?, ?)
 `)
 
 const getFileById = db.prepare(`
@@ -408,6 +419,7 @@ const updateDiscoverable = db.prepare(`
 export interface FileRecord {
   id: string
   uploader_id: string
+  recipient_id: string | null
   size: number
   mime_hint: string
   created_at: number
@@ -678,9 +690,10 @@ export const database = {
     uploaderId: string,
     size: number,
     mimeHint: string,
-    expiresAt?: number
+    expiresAt?: number,
+    recipientId?: string
   ): void {
-    insertFile.run(id, uploaderId, size, mimeHint, expiresAt ?? null)
+    insertFile.run(id, uploaderId, size, mimeHint, expiresAt ?? null, recipientId ?? null)
   },
 
   getFileById(fileId: string): FileRecord | undefined {

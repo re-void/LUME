@@ -373,6 +373,40 @@ export function ratchetEncrypt(
 }
 
 /**
+ * Глубокая копия сессии для snapshot/restore паттерна
+ */
+function cloneSession(session: DoubleRatchetSession): DoubleRatchetSession {
+    return {
+        dhSendingKeyPair: { publicKey: session.dhSendingKeyPair.publicKey, secretKey: session.dhSendingKeyPair.secretKey },
+        dhReceivingPublicKey: session.dhReceivingPublicKey,
+        rootKey: new Uint8Array(session.rootKey),
+        sendingChainKey: session.sendingChainKey ? new Uint8Array(session.sendingChainKey) : null,
+        receivingChainKey: session.receivingChainKey ? new Uint8Array(session.receivingChainKey) : null,
+        sendingMessageNumber: session.sendingMessageNumber,
+        receivingMessageNumber: session.receivingMessageNumber,
+        previousSendingChainLength: session.previousSendingChainLength,
+        skippedMessageKeys: new Map(
+            Array.from(session.skippedMessageKeys.entries()).map(([k, v]) => [k, new Uint8Array(v)])
+        ),
+    };
+}
+
+/**
+ * Восстанавливает сессию из snapshot (при неудачной расшифровке после DH ratchet)
+ */
+function restoreSession(target: DoubleRatchetSession, source: DoubleRatchetSession): void {
+    target.dhSendingKeyPair = source.dhSendingKeyPair;
+    target.dhReceivingPublicKey = source.dhReceivingPublicKey;
+    target.rootKey = source.rootKey;
+    target.sendingChainKey = source.sendingChainKey;
+    target.receivingChainKey = source.receivingChainKey;
+    target.sendingMessageNumber = source.sendingMessageNumber;
+    target.receivingMessageNumber = source.receivingMessageNumber;
+    target.previousSendingChainLength = source.previousSendingChainLength;
+    target.skippedMessageKeys = source.skippedMessageKeys;
+}
+
+/**
  * Расшифровывает сообщение
  */
 export function ratchetDecrypt(
@@ -393,8 +427,12 @@ export function ratchetDecrypt(
         return result;
     }
 
+    // Snapshot сессии перед потенциально деструктивным DH ratchet
+    const needsDhRatchet = message.header.publicKey !== session.dhReceivingPublicKey;
+    const snapshot = needsDhRatchet ? cloneSession(session) : null;
+
     // Нужен ли DH ratchet?
-    if (message.header.publicKey !== session.dhReceivingPublicKey) {
+    if (needsDhRatchet) {
         // Пропускаем оставшиеся ключи в текущей receiving chain
         if (session.receivingChainKey) {
             skipMessageKeys(session, message.header.previousChainLength);
@@ -408,11 +446,14 @@ export function ratchetDecrypt(
     skipMessageKeys(session, message.header.messageNumber);
 
     if (!session.receivingChainKey) {
+        if (snapshot) restoreSession(session, snapshot);
         throw new Error('Receiving chain not initialized');
     }
 
     // Получаем message key
+    const oldReceivingChainKey = session.receivingChainKey;
     const { chainKey, messageKey } = kdfCk(session.receivingChainKey);
+    zeroBytes(oldReceivingChainKey);
     session.receivingChainKey = chainKey;
     session.receivingMessageNumber++;
 
@@ -421,6 +462,12 @@ export function ratchetDecrypt(
     const nonce = decodeBase64(message.nonce);
     const result = nacl.secretbox.open(ciphertext, nonce, messageKey);
     zeroBytes(messageKey);
+
+    // Если расшифровка не удалась и был выполнен DH ratchet — откатываем сессию
+    if (result === null && snapshot) {
+        restoreSession(session, snapshot);
+    }
+
     return result;
 }
 

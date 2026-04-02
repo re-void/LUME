@@ -89,7 +89,8 @@ export function initWebSocket(wss: WebSocketServer): void {
     connectionRateLimits.set(ip, validTimestamps)
 
     const skipOriginCheck =
-      process.env.SKIP_ORIGIN_CHECK === '1' && process.env.NODE_ENV !== 'production'
+      process.env.SKIP_ORIGIN_CHECK === '1' &&
+      (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test')
     if (!skipOriginCheck) {
       const origin = (req.headers.origin as string | undefined) || ''
       if (!isOriginAllowed(origin, ORIGIN_ALLOWLIST)) {
@@ -188,6 +189,7 @@ export function initWebSocket(wss: WebSocketServer): void {
             if (!isValidRecipientId(message.recipientId)) break
             // Prevent sending typing to self
             if (message.recipientId === ws.userId) break
+            if (database.isBlocked(message.recipientId, ws.userId)) break
             handleTyping(ws.userId, ws.username, message)
             break
           }
@@ -197,6 +199,7 @@ export function initWebSocket(wss: WebSocketServer): void {
             if (!isValidMessageIds(message.messageIds)) break
             // Prevent sending read receipt to self
             if (message.recipientId === ws.userId) break
+            if (database.isBlocked(message.recipientId, ws.userId)) break
             handleReadReceipt(ws.userId, message)
             break
           }
