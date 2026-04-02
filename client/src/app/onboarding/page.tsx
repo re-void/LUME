@@ -75,7 +75,7 @@ function LockIcon() {
   );
 }
 
-function KeyIcon() {
+function ShieldIcon() {
   return (
     <svg
       className="w-12 h-12 sm:w-16 sm:h-16"
@@ -84,9 +84,8 @@ function KeyIcon() {
       viewBox="0 0 24 24"
       aria-hidden="true"
     >
-      <circle cx="8" cy="15" r="5" strokeWidth={1.5} />
       <path
-        d="M11.5 11.5L21 2m-2 0h2v2"
+        d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"
         strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -123,51 +122,55 @@ export default function OnboardingPage() {
       className="overflow-y-auto"
       style={{ background: "var(--background)", color: "var(--text-primary)" }}
     >
-      {/* Section 1 — Welcome */}
+      {/* Section 1 — First impression */}
       <OnboardingSection immediate>
         <h1 className="stagger-1 text-3xl sm:text-5xl font-semibold uppercase tracking-[0.28em]">
           L U M E
         </h1>
         <p className="stagger-2 mt-4 text-xs sm:text-sm uppercase tracking-[0.28em] text-[var(--text-secondary)]">
-          Private by default
+          Your messages. Your keys. Your rules.
         </p>
       </OnboardingSection>
 
-      {/* Section 2 — Encryption */}
+      {/* Section 2 — No identity */}
+      <OnboardingSection>
+        <div className="text-[var(--text-primary)]">
+          <ShieldIcon />
+        </div>
+        <h2 className="mt-6 text-2xl sm:text-3xl font-semibold uppercase tracking-[0.08em]">
+          No identity required
+        </h2>
+        <p className="mt-4 text-sm sm:text-base text-[var(--text-secondary)] max-w-md leading-relaxed">
+          No phone number. No email. No password.
+          <br />
+          Your account is a cryptographic key pair — nothing more.
+        </p>
+      </OnboardingSection>
+
+      {/* Section 3 — Zero access */}
       <OnboardingSection>
         <div className="text-[var(--text-primary)]">
           <LockIcon />
         </div>
         <h2 className="mt-6 text-2xl sm:text-3xl font-semibold uppercase tracking-[0.08em]">
-          End-to-end encrypted
-        </h2>
-        <p className="mt-4 text-sm sm:text-base text-[var(--text-secondary)] max-w-md">
-          No phone. No email. No traces.
-        </p>
-      </OnboardingSection>
-
-      {/* Section 3 — How it works */}
-      <OnboardingSection>
-        <div className="text-[var(--text-primary)]">
-          <KeyIcon />
-        </div>
-        <h2 className="mt-6 text-2xl sm:text-3xl font-semibold uppercase tracking-[0.08em]">
-          How it works
+          Zero access
         </h2>
         <p className="mt-4 text-sm sm:text-base text-[var(--text-secondary)] max-w-md leading-relaxed">
-          Your messages are encrypted before leaving your device. Even we
-          can&apos;t read them.
+          Messages are encrypted on your device before they leave it.
+          <br />
+          The server is a blind relay — it cannot read, decrypt, or store
+          anything.
         </p>
       </OnboardingSection>
 
-      {/* Section 4 — Ready */}
+      {/* Section 4 — Start */}
       <OnboardingSection>
-        <p className="text-3xl sm:text-4xl font-semibold tracking-[0.08em] text-[var(--text-primary)]">
-          /.
-        </p>
-        <h2 className="mt-6 text-2xl sm:text-3xl font-semibold uppercase tracking-[0.08em]">
-          You&apos;re ready.
+        <h2 className="text-2xl sm:text-3xl font-semibold uppercase tracking-[0.08em]">
+          Ready when you are
         </h2>
+        <p className="mt-4 text-sm sm:text-base text-[var(--text-secondary)] max-w-md">
+          Everything stays on your device. Always.
+        </p>
         <div className="mt-10 w-full max-w-xs space-y-3">
           <button
             onClick={() => handleNavigate("/setup")}
