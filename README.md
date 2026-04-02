@@ -111,6 +111,7 @@ WS_JWT_SECRET=$(openssl rand -hex 32) docker compose up --build
 
 <p align="center">
   <a href="docs/PROTOCOL.md"><img src="https://img.shields.io/badge/Protocol_&_API-docs-black?style=flat-square&logo=gitbook&logoColor=white" alt="Docs"></a>
+  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/Contributing-guide-black?style=flat-square&logo=githubsponsors&logoColor=white" alt="Contributing"></a>
   <a href="SECURITY.md"><img src="https://img.shields.io/badge/Security-policy-black?style=flat-square&logo=hackthebox&logoColor=white" alt="Security"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL--3.0-black?style=flat-square&logo=gnu&logoColor=white" alt="License"></a>
 </p>
