@@ -27,11 +27,16 @@
 <summary><strong>Features</strong></summary>
 <br>
 
-**Privacy** — E2E encryption, forward secrecy, hidden chats with PIN, panic wipe, self-destructing messages, seed phrase recovery
-
-**Communication** — 1-to-1 & group chats, file attachments, typing indicators, read receipts, push notifications, dark/light theme
-
-**Security** — Ed25519 signing, replay protection, PBKDF2 (600K iterations), safety numbers, prekey rotation, rate limiting
+- End-to-end encrypted messages — the server cannot read them
+- Forward secrecy — compromise of one key doesn't expose past messages
+- Anonymous identity — no phone number, no email, no password
+- Self-destructing messages — auto-delete after a set time
+- Panic wipe — erase all local data in one tap
+- Hidden chats — separate PIN to access private conversations
+- Encrypted file sharing — attachments up to 5 MB, E2E encrypted
+- Group chats — roles, permissions, encrypted for all members
+- Seed phrase backup — recover your identity on any device
+- Offline delivery — messages queue for up to 30 days
 
 </details>
 
@@ -39,11 +44,11 @@
 <summary><strong>Stack</strong></summary>
 <br>
 
-| | |
-|:--|:--|
-| **Client** | Next.js 16 · React 19 · Tailwind · Zustand · TweetNaCl |
-| **Server** | Express · WebSocket · SQLite |
-| **Infra** | Vercel · Render · GitHub Actions · Docker |
+```
+Client     Next.js 16  ·  React 19  ·  Tailwind  ·  Zustand  ·  TweetNaCl
+Server     Express  ·  WebSocket  ·  SQLite
+Infra      Vercel  ·  Render  ·  GitHub Actions  ·  Docker
+```
 
 </details>
 
