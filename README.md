@@ -12,9 +12,9 @@
 
 <br>
 
-```
-X3DH key agreement  ·  Double Ratchet  ·  Forward secrecy  ·  E2E file transfer
-```
+<p align="center">
+  <code>X3DH key agreement  ·  Double Ratchet  ·  Forward secrecy  ·  E2E file transfer</code>
+</p>
 
 <br>
 
