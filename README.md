@@ -1,34 +1,45 @@
-# LUME
+# [LUME](https://github.com/umaiw/LUME) – End-to-End Encrypted Messenger
 
-## Stack
+This is the complete source code and build instructions for the LUME messenger, an anonymous end-to-end encrypted communication platform based on the [X3DH][x3dh] key agreement protocol and the [Double Ratchet][doubleratchet] algorithm.
 
-**Client:** Next.js 16, React 19, Tailwind CSS, Zustand, tweetnacl
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 
-**Server:** Express, WebSocket (ws), SQLite (better-sqlite3), TypeScript
+<p align="center">
+  <img src="docs/logo.png" alt="LUME" width="400">
+</p>
 
-**Infrastructure:** Vercel (client), Render (server), GitHub Actions CI
+The source code is published under AGPLv3, the license is available [here][license].
+
+## Supported platforms
+
+The latest version is available as a Progressive Web App for any modern browser:
+
+* Chrome / Chromium 90+
+* Firefox 90+
+* Safari 15+
+* Edge 90+
+
+Installable as a PWA on desktop and mobile with offline support.
 
 ## Features
 
-- 1-to-1 encrypted messaging with forward secrecy
-- Double Ratchet with out-of-order message handling
-- Encrypted file attachments (up to 5MB)
-- Group chats with role-based member management
-- Real-time delivery via WebSocket
-- Typing indicators and read receipts
-- Self-destructing messages (up to 7 days)
-- Profile avatars and display names
-- Contact blocking (invisible to the blocked party)
-- Hidden chats with separate PIN protection
-- Panic wipe — erase all local data instantly
-- Mnemonic seed phrase backup and recovery
-- Signed prekey rotation (7-day cycle with grace period)
-- One-time prekey replenishment
-- Safety number verification
-- Offline message queue (30-day TTL)
-- Push notifications (Web Push API)
-- Dark/light/system theme
-- Progressive Web App with offline support
+* 1-to-1 encrypted messaging with forward secrecy
+* Double Ratchet with out-of-order message handling
+* Encrypted file attachments (up to 5 MB)
+* Group chats with role-based member management
+* Real-time delivery via WebSocket
+* Typing indicators and read receipts
+* Self-destructing messages (up to 7 days)
+* Profile avatars and display names
+* Contact blocking (invisible to the blocked party)
+* Hidden chats with separate PIN protection
+* Panic wipe — erase all local data instantly
+* Mnemonic seed phrase backup and recovery
+* Signed prekey rotation (7-day cycle with grace period)
+* Safety number verification
+* Offline message queue (30-day TTL)
+* Push notifications (Web Push API)
+* Dark / light / system theme
 
 ## Architecture
 
@@ -57,7 +68,32 @@
 
 The server stores and forwards encrypted payloads. It cannot read message content, decrypt files, or access private keys. All cryptographic operations happen exclusively on the client.
 
-## Quick Start
+## Security
+
+* All messages are end-to-end encrypted — the server never sees plaintext
+* Private keys stored in IndexedDB, encrypted with PBKDF2-derived master key (600K iterations)
+* Ed25519 request signing with replay protection (nonce + 60s timestamp window)
+* Rate limiting on all endpoints
+* Zod schema validation on every API boundary
+* No `eval()`, no string-concatenated SQL, no `dangerouslySetInnerHTML`
+* CSP headers in production
+
+To report a security vulnerability, see [SECURITY.md](SECURITY.md).
+
+## Third-party
+
+* Next.js 16 ([MIT License](https://github.com/vercel/next.js/blob/canary/license.md))
+* React 19 ([MIT License](https://github.com/facebook/react/blob/main/LICENSE))
+* Tailwind CSS ([MIT License](https://github.com/tailwindlabs/tailwindcss/blob/master/LICENSE))
+* Zustand ([MIT License](https://github.com/pmndrs/zustand/blob/main/LICENSE))
+* TweetNaCl.js ([Unlicense](https://github.com/nickchan2/tweetnacl-js/blob/master/UNLICENSE))
+* Express ([MIT License](https://github.com/expressjs/express/blob/master/LICENSE))
+* ws ([MIT License](https://github.com/websockets/ws/blob/master/LICENSE))
+* better-sqlite3 ([MIT License](https://github.com/WiseLibs/better-sqlite3/blob/master/LICENSE))
+* Zod ([MIT License](https://github.com/colinhacks/zod/blob/main/LICENSE))
+* TypeScript ([Apache License 2.0](https://github.com/microsoft/TypeScript/blob/main/LICENSE.txt))
+
+## Quick start
 
 ```bash
 # Clone
@@ -83,39 +119,25 @@ Server runs on `http://localhost:3001`, client on `http://localhost:3000`.
 ## Docker
 
 ```bash
-# Set required env vars
 export WS_JWT_SECRET=$(openssl rand -hex 32)
 export CLIENT_ORIGIN=http://localhost:3000
 
 docker compose up --build
 ```
 
-## Environment Variables
+## Build instructions
 
-### Server
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `WS_JWT_SECRET` | Yes | — | JWT signing secret (min 32 bytes) |
-| `PORT` | No | `3001` | HTTP/WS port |
-| `CLIENT_ORIGIN` | No | `http://localhost:3000` | CORS allowlist (comma-separated) |
-| `TRUST_PROXY` | No | `0` | Set to `1` behind reverse proxy |
-| `DB_PATH` | No | `./data/messenger.db` | SQLite database path |
-
-### Client
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `NEXT_PUBLIC_API_URL` | No | `http://localhost:3001/api` | Server API URL |
-| `NEXT_PUBLIC_WS_URL` | No | `ws://localhost:3001/ws` | WebSocket URL |
+* [Environment variables](docs/PROTOCOL.md)
+* [Docker deployment](docker-compose.yml)
+* [API & protocol reference](docs/PROTOCOL.md)
 
 ## Testing
 
 ```bash
-# Server tests (55 tests)
+# Server tests
 cd server && npx vitest run
 
-# Client tests (365+ tests)
+# Client tests
 cd client && npx vitest run
 
 # E2E tests
@@ -125,22 +147,7 @@ cd client && npx playwright test
 npm run validate
 ```
 
-## API Documentation
-
-Full protocol reference including all REST endpoints, WebSocket messages, and encrypted payload formats: [`docs/PROTOCOL.md`](docs/PROTOCOL.md)
-
-## Security
-
-- All messages are end-to-end encrypted — the server never sees plaintext
-- Private keys are stored in IndexedDB, encrypted with PBKDF2-derived master key (600K iterations)
-- Ed25519 request signing with replay protection (nonce + 60s timestamp window)
-- Rate limiting on all endpoints
-- Zod schema validation on every API boundary
-- No `eval()`, no string-concatenated SQL, no `dangerouslySetInnerHTML`
-- CSP headers in production
-
-To report a security vulnerability, open a GitHub issue or contact the maintainers directly.
-
-## License
-
-[AGPL-3.0](LICENSE)
+[//]: # (LINKS)
+[x3dh]: https://signal.org/docs/specifications/x3dh/
+[doubleratchet]: https://signal.org/docs/specifications/doubleratchet/
+[license]: LICENSE
