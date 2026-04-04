@@ -5,7 +5,7 @@ import type { Message, MessageAttachment } from "@/stores";
 import { formatCountdown } from "./chatUtils";
 import { filesApi } from "@/lib/api";
 import { decryptFile, createFileUrl, formatFileSize, isImageMime } from "@/lib/fileEncryption";
-import { useAuthStore } from "@/stores";
+import { vaultHasKeys } from "@/crypto/keyVault";
 
 function StatusIcon({ status }: { status: Message["status"] }) {
   const base = "w-4 h-4";
@@ -92,12 +92,11 @@ function AttachmentView({ attachment }: { attachment: MessageAttachment }) {
   const isImage = isImageMime(attachment.mimeType);
 
   const handleDownload = useCallback(async () => {
-    const identityKeys = useAuthStore.getState().identityKeys;
-    if (!identityKeys) return;
+    if (!vaultHasKeys()) return;
     setLoading(true);
     setError(false);
     try {
-      const { data, error: dlError } = await filesApi.download(attachment.fileId, identityKeys);
+      const { data, error: dlError } = await filesApi.download(attachment.fileId);
       if (dlError || !data) throw new Error(dlError || 'Download failed');
       const decrypted = await decryptFile(data.data, attachment.nonce, attachment.key, attachment.mimeType, attachment.fileName);
       if (!decrypted) throw new Error('Decryption failed');

@@ -18,8 +18,8 @@ const mocks = vi.hoisted(() => ({
   saveContacts: vi.fn().mockResolvedValue(undefined),
   contacts: [] as unknown[],
   authUsername: 'alice',
-  authMasterKey: new Uint8Array(32).fill(1) as Uint8Array | null,
-  authIdentityKeys: { signing: { publicKey: 'mock-pk', secretKey: new Uint8Array(64) }, exchange: { publicKey: 'mock-epk', secretKey: new Uint8Array(32) } } as Record<string, unknown> | null,
+  vaultHasKeysValue: true,
+  vaultMasterKey: new Uint8Array(32).fill(1) as Uint8Array | null,
   existingChats: [] as unknown[],
 }));
 
@@ -43,12 +43,20 @@ vi.mock('@/stores', () => {
   useChatsStore.getState = () => ({ chats: mocks.existingChats });
 
   const useAuthStore = (selector?: (s: unknown) => unknown) => {
-    const state = { username: mocks.authUsername, masterKey: mocks.authMasterKey, identityKeys: mocks.authIdentityKeys };
+    const state = { username: mocks.authUsername };
     return selector ? selector(state) : state;
   };
 
   return { useAuthStore, useContactsStore, useChatsStore };
 });
+
+vi.mock('@/crypto/keyVault', () => ({
+  vaultHasKeys: () => mocks.vaultHasKeysValue,
+  vaultGetMasterKey: () => {
+    if (!mocks.vaultMasterKey) throw new Error('Vault: no master key');
+    return mocks.vaultMasterKey;
+  },
+}));
 
 vi.mock('@/lib/api', () => ({
   authApi: { getUser: mocks.getUser },
@@ -74,8 +82,8 @@ describe('useContactActions', () => {
     mocks.contacts = [];
     mocks.existingChats = [];
     mocks.authUsername = 'alice';
-    mocks.authMasterKey = new Uint8Array(32).fill(1);
-    mocks.authIdentityKeys = { signing: { publicKey: 'mock-pk', secretKey: new Uint8Array(64) }, exchange: { publicKey: 'mock-epk', secretKey: new Uint8Array(32) } };
+    mocks.vaultHasKeysValue = true;
+    mocks.vaultMasterKey = new Uint8Array(32).fill(1);
     mocks.saveContacts.mockResolvedValue(undefined);
   });
 
@@ -145,7 +153,7 @@ describe('useContactActions', () => {
         await result.current.handleAddContact();
       });
 
-      expect(mocks.getUser).toHaveBeenCalledWith('bob', mocks.authIdentityKeys);
+      expect(mocks.getUser).toHaveBeenCalledWith('bob');
       expect(mocks.addContact).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'bob-id', username: 'bob' })
       );
@@ -244,8 +252,8 @@ describe('useContactActions', () => {
       expect(mocks.addContact).not.toHaveBeenCalled();
     });
 
-    it('sets "Not authenticated" when identityKeys is null', async () => {
-      mocks.authIdentityKeys = null;
+    it('sets "Not authenticated" when vault has no keys', async () => {
+      mocks.vaultHasKeysValue = false;
 
       const { result } = renderHook(() => useContactActions());
       act(() => result.current.setNewContactUsername('bob'));
@@ -284,7 +292,7 @@ describe('useContactActions', () => {
         await result.current.handleAddContact();
       });
 
-      expect(mocks.getUser).toHaveBeenCalledWith('bob', mocks.authIdentityKeys);
+      expect(mocks.getUser).toHaveBeenCalledWith('bob');
     });
 
     it('addContactLoading is false after request completes', async () => {
@@ -301,7 +309,7 @@ describe('useContactActions', () => {
     });
 
     it('does not call saveContacts when masterKey is null', async () => {
-      mocks.authMasterKey = null;
+      mocks.vaultMasterKey = null;
       mocks.getUser.mockResolvedValue({
         data: { id: 'bob-id', username: 'bob', identityKey: 'pk', exchangeIdentityKey: 'ek' },
         error: null,

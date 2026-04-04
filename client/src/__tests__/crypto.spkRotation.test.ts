@@ -22,6 +22,7 @@ import {
   deriveMasterKeyFromPin,
 } from '@/crypto/storage';
 import { generateIdentityKeys, generateExchangeKeyPair } from '@/crypto/keys';
+import { vaultSetAuth, vaultClear } from '@/crypto/keyVault';
 
 // Mock authApi so we don't make real HTTP calls
 vi.mock('@/lib/api', () => ({
@@ -49,9 +50,12 @@ const userId = 'test-user-id';
 // ── Setup ────────────────────────────────────────────────────────────────────
 
 beforeEach(async () => {
+  vaultClear();
   clearCachedMasterKey();
   await clear();
   masterKey = await deriveMasterKeyFromPin('test-pin');
+  // Set vault so checkAndRotateSpk can access signing keys
+  vaultSetAuth(identityKeys, masterKey);
   vi.clearAllMocks();
 });
 
@@ -62,7 +66,7 @@ describe('checkAndRotateSpk', () => {
     const material = makeFreshMaterial(0); // just created
     await savePreKeyMaterial(material, masterKey);
 
-    const result = await checkAndRotateSpk(masterKey, userId, identityKeys);
+    const result = await checkAndRotateSpk(masterKey, userId);
 
     expect(result.rotated).toBe(false);
     expect(result.error).toBeUndefined();
@@ -78,7 +82,7 @@ describe('checkAndRotateSpk', () => {
     material.signedPreKey = { publicKey: oldSpkPubKey, secretKey: 'old_secret' };
     await savePreKeyMaterial(material, masterKey);
 
-    const result = await checkAndRotateSpk(masterKey, userId, identityKeys);
+    const result = await checkAndRotateSpk(masterKey, userId);
 
     expect(result.rotated).toBe(true);
 
@@ -97,7 +101,7 @@ describe('checkAndRotateSpk', () => {
     material.spkCreatedAt = undefined;
     await savePreKeyMaterial(material, masterKey);
 
-    const result = await checkAndRotateSpk(masterKey, userId, identityKeys);
+    const result = await checkAndRotateSpk(masterKey, userId);
     expect(result.rotated).toBe(true);
   });
 
@@ -109,7 +113,7 @@ describe('checkAndRotateSpk', () => {
     material.previousSpkRetiredAt = now - PREVIOUS_SPK_GRACE_PERIOD_MS - 1000;
     await savePreKeyMaterial(material, masterKey);
 
-    const result = await checkAndRotateSpk(masterKey, userId, identityKeys);
+    const result = await checkAndRotateSpk(masterKey, userId);
 
     expect(result.rotated).toBe(false);
 
@@ -126,7 +130,7 @@ describe('checkAndRotateSpk', () => {
     material.previousSpkRetiredAt = now - 1000; // just retired, within grace
     await savePreKeyMaterial(material, masterKey);
 
-    await checkAndRotateSpk(masterKey, userId, identityKeys);
+    await checkAndRotateSpk(masterKey, userId);
 
     const loaded = await loadPreKeyMaterial(masterKey);
     expect(loaded!.previousSignedPreKey).toBeDefined();
@@ -134,7 +138,7 @@ describe('checkAndRotateSpk', () => {
 
   it('returns error when no prekey material found', async () => {
     // Don't save any material
-    const result = await checkAndRotateSpk(masterKey, userId, identityKeys);
+    const result = await checkAndRotateSpk(masterKey, userId);
     expect(result.rotated).toBe(false);
     expect(result.error).toBe('No prekey material found');
   });
@@ -148,7 +152,7 @@ describe('checkAndRotateSpk', () => {
     const material = makeFreshMaterial(SPK_ROTATION_INTERVAL_MS + 1000);
     await savePreKeyMaterial(material, masterKey);
 
-    const result = await checkAndRotateSpk(masterKey, userId, identityKeys);
+    const result = await checkAndRotateSpk(masterKey, userId);
 
     expect(result.rotated).toBe(true);
     expect(result.error).toContain('SPK upload failed');

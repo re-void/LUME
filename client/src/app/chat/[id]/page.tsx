@@ -62,6 +62,12 @@ import {
   x3dhInitiate,
 } from "@/crypto/ratchet";
 import { computeSafetyNumber } from "@/crypto/safetyNumber";
+import {
+  vaultGetSession,
+  vaultGetExchangeKeyPair,
+  vaultGetPublicKeys,
+  vaultHasKeys,
+} from "@/crypto/keyVault";
 import type { PendingAttachment } from "@/components/chat/ChatInput";
 import {
   encryptFile,
@@ -85,8 +91,7 @@ export default function ChatPage({ params }: ChatPageProps) {
   const typingStateRef = useRef(false);
 
   const userId = useAuthStore((s) => s.userId);
-  const identityKeys = useAuthStore((s) => s.identityKeys);
-  const masterKey = useAuthStore((s) => s.masterKey);
+  const hasKeys = useAuthStore((s) => s.hasIdentityKeys);
   const contacts = useContactsStore((s) => s.contacts);
   const removeContact = useContactsStore((s) => s.removeContact);
   const avatarMap = useContactAvatars(contacts);
@@ -150,11 +155,12 @@ export default function ChatPage({ params }: ChatPageProps) {
   const isTyping = useTypingStore((s) =>
     contactId ? (s.typingUsers[contactId] ?? false) : false,
   );
+  const pubKeys = vaultGetPublicKeys();
   const safetyNumber =
-    identityKeys && contact
+    pubKeys && contact
       ? computeSafetyNumber({
-          mySigningPublicKey: identityKeys.signing.publicKey,
-          myExchangeIdentityPublicKey: identityKeys.exchange.publicKey,
+          mySigningPublicKey: pubKeys.signingPublicKey,
+          myExchangeIdentityPublicKey: pubKeys.exchangePublicKey,
           theirSigningPublicKey: contact.publicKey,
           theirExchangeIdentityPublicKey: contact.exchangeKey,
         })
@@ -162,12 +168,12 @@ export default function ChatPage({ params }: ChatPageProps) {
 
   // Load contact avatar
   useEffect(() => {
-    if (!contactId || !identityKeys) return;
+    if (!contactId || !hasKeys) return;
     let cancelled = false;
 
     (async () => {
       try {
-        const res = await profileApi.get(contactId, identityKeys);
+        const res = await profileApi.get(contactId);
         if (cancelled || !res.data?.avatarFileId) return;
 
         const fid = res.data.avatarFileId;
@@ -177,9 +183,8 @@ export default function ChatPage({ params }: ChatPageProps) {
           return;
         }
 
-        const keys = identityKeys;
         const url = await downloadAndCacheAvatar(fid, async () => {
-          const r = await filesApi.download(fid, keys);
+          const r = await filesApi.download(fid);
           if (!r.data) return null;
           return { data: r.data.data, mimeHint: r.data.mimeHint };
         });
@@ -192,7 +197,7 @@ export default function ChatPage({ params }: ChatPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [contactId, identityKeys]);
+  }, [contactId, hasKeys]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -237,10 +242,10 @@ export default function ChatPage({ params }: ChatPageProps) {
 
   useEffect(() => {
     if (!hydrated) return;
-    if (!userId || !identityKeys) {
+    if (!userId || !hasKeys) {
       router.push("/unlock");
     }
-  }, [hydrated, userId, identityKeys, router]);
+  }, [hydrated, userId, hasKeys, router]);
 
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -338,7 +343,7 @@ export default function ChatPage({ params }: ChatPageProps) {
   const handleSend = async () => {
     const hasText = messageText.trim().length > 0;
     const hasAttachment = !!pendingAttachment;
-    if ((!hasText && !hasAttachment) || !contact || !userId || !identityKeys)
+    if ((!hasText && !hasAttachment) || !contact || !userId || !hasKeys)
       return;
 
     setSending(true);
@@ -361,7 +366,6 @@ export default function ChatPage({ params }: ChatPageProps) {
           await filesApi.upload(
             encrypted.ciphertext,
             encrypted.mimeType,
-            identityKeys,
           );
         if (uploadError || !uploadResult) {
           throw new Error(uploadError || "File upload failed");
@@ -434,8 +438,7 @@ export default function ChatPage({ params }: ChatPageProps) {
       });
       const plaintextBytes = new TextEncoder().encode(plaintext);
 
-      const sessions = useSessionsStore.getState().sessions;
-      const existing = contactId ? sessions[contactId] : undefined;
+      const existing = contactId ? vaultGetSession(contactId) : undefined;
 
       let session = existing ? deserializeSession(existing) : null;
       let x3dhInit:
@@ -450,7 +453,6 @@ export default function ChatPage({ params }: ChatPageProps) {
         // First message to this contact: do X3DH (bundle is signed) and start a ratchet session.
         const { data: bundle, error: bundleError } = await authApi.getBundle(
           contact.username,
-          identityKeys,
         );
         if (bundleError || !bundle) {
           throw new Error(bundleError || "Failed to fetch bundle");
@@ -471,7 +473,7 @@ export default function ChatPage({ params }: ChatPageProps) {
         }
 
         const { sharedSecret, ephemeralPublicKey } = x3dhInitiate(
-          identityKeys.exchange,
+          vaultGetExchangeKeyPair(),
           {
             identityKey: recipientIk,
             signingKey: bundle.identityKey,
@@ -483,7 +485,7 @@ export default function ChatPage({ params }: ChatPageProps) {
 
         session = initSenderSession(sharedSecret, bundle.signedPrekey);
         x3dhInit = {
-          senderIdentityKey: identityKeys.exchange.publicKey,
+          senderIdentityKey: vaultGetPublicKeys()!.exchangePublicKey,
           senderEphemeralKey: ephemeralPublicKey,
           recipientOneTimePreKey: bundle.oneTimePrekey ?? null,
         };
@@ -501,14 +503,11 @@ export default function ChatPage({ params }: ChatPageProps) {
         upsertSession(contactId, serializeSession(session));
       }
 
-      const { data, error } = await messagesApi.send(
-        {
-          senderId: userId,
-          recipientUsername: contact.username,
-          encryptedPayload,
-        },
-        identityKeys,
-      );
+      const { data, error } = await messagesApi.send({
+        senderId: userId,
+        recipientUsername: contact.username,
+        encryptedPayload,
+      });
 
       if (error) {
         updateMessage(chatId, messageId, { status: "failed" });
@@ -783,7 +782,6 @@ export default function ChatPage({ params }: ChatPageProps) {
         onClose={() => setShowProfile(false)}
         contact={contact}
         chat={chat}
-        identityKeys={identityKeys}
         safetyNumber={safetyNumber}
         isContactBlocked={isContactBlocked}
         onDeleteContact={handleDeleteContact}
@@ -794,7 +792,6 @@ export default function ChatPage({ params }: ChatPageProps) {
       <BackupModal
         isOpen={showBackupModal}
         onClose={() => setShowBackupModal(false)}
-        masterKey={masterKey}
       />
     </div>
   );

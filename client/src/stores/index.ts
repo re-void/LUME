@@ -4,9 +4,8 @@
  */
 
 import { create } from "zustand";
-import type { IdentityKeys } from "@/crypto/keys";
 import type { Contact } from "@/crypto/storage";
-import { clearCachedMasterKey } from "@/crypto/storage";
+import { vaultClear, vaultSetSessions, vaultUpsertSession, vaultDeleteSession } from "@/crypto/keyVault";
 import type { SerializedSession } from "@/crypto/ratchet";
 
 // ==================== Auth Store ====================
@@ -15,55 +14,40 @@ interface AuthState {
   isAuthenticated: boolean;
   userId: string | null;
   username: string | null;
-  identityKeys: IdentityKeys | null;
-  /** Derived encryption key — never the raw PIN. */
-  masterKey: Uint8Array | null;
+  /** Whether the vault holds identity keys (UI guard — no key material in store). */
+  hasIdentityKeys: boolean;
   /** Whether this user is discoverable by username. */
   discoverable: boolean;
 
   // Actions
-  setAuth: (
-    userId: string,
-    username: string,
-    keys: IdentityKeys,
-    masterKey: Uint8Array,
-  ) => void;
+  setAuth: (userId: string, username: string) => void;
   clearAuth: () => void;
-  setMasterKey: (key: Uint8Array) => void;
   setDiscoverable: (value: boolean) => void;
 }
 
-// SECURITY: Never persist secret keys in web storage. Keep them in-memory only.
-// The raw PIN is never stored — only the derived master key lives here temporarily.
-export const useAuthStore = create<AuthState>((set, get) => ({
+// SECURITY: Private key material lives in the vault (crypto/keyVault.ts), not here.
+// This store holds only public data and boolean flags for UI reactivity.
+export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   userId: null,
   username: null,
-  identityKeys: null,
-  masterKey: null,
+  hasIdentityKeys: false,
   discoverable: true,
 
-  setAuth: (userId, username, identityKeys, masterKey) =>
-    set({ isAuthenticated: true, userId, username, identityKeys, masterKey }),
+  setAuth: (userId, username) =>
+    set({ isAuthenticated: true, userId, username, hasIdentityKeys: true }),
 
   clearAuth: () => {
-    // Zero out key material before releasing the reference
-    const currentKey = get().masterKey;
-    if (currentKey) {
-      currentKey.fill(0);
-    }
-    clearCachedMasterKey();
+    vaultClear();
     set({
       isAuthenticated: false,
       userId: null,
       username: null,
-      identityKeys: null,
-      masterKey: null,
+      hasIdentityKeys: false,
       discoverable: true,
     });
   },
 
-  setMasterKey: (key) => set({ masterKey: key }),
   setDiscoverable: (value) => set({ discoverable: value }),
 }));
 
@@ -103,7 +87,8 @@ export const useContactsStore = create<ContactsState>()((set) => ({
 // ==================== Sessions Store (Double Ratchet) ====================
 
 interface SessionsState {
-  sessions: Record<string, SerializedSession>;
+  /** Contact IDs with active ratchet sessions (no key material — vault holds sessions). */
+  sessionContactIds: string[];
 
   setSessions: (sessions: Record<string, SerializedSession>) => void;
   upsertSession: (contactId: string, session: SerializedSession) => void;
@@ -111,22 +96,33 @@ interface SessionsState {
 }
 
 export const useSessionsStore = create<SessionsState>()((set) => ({
-  sessions: {},
+  sessionContactIds: [],
 
-  setSessions: (sessions) => set({ sessions }),
+  setSessions: (sessions) => {
+    vaultSetSessions(sessions);
+    set({ sessionContactIds: Object.keys(sessions) });
+  },
 
-  upsertSession: (contactId, session) =>
-    set((state) => ({
-      sessions: { ...state.sessions, [contactId]: session },
-    })),
-
-  deleteSession: (contactId) =>
+  upsertSession: (contactId, session) => {
+    vaultUpsertSession(contactId, session);
     set((state) => {
-      if (!(contactId in state.sessions)) return state;
-      const next = { ...state.sessions };
-      delete next[contactId];
-      return { sessions: next };
-    }),
+      if (state.sessionContactIds.includes(contactId)) return state;
+      return { sessionContactIds: [...state.sessionContactIds, contactId] };
+    });
+  },
+
+  deleteSession: (contactId) => {
+    vaultDeleteSession(contactId);
+    set((state) => {
+      if (!state.sessionContactIds.includes(contactId)) return state;
+      return {
+        sessionContactIds: state.sessionContactIds.filter(
+          (id) => id !== contactId,
+        ),
+      };
+    });
+  },
+
 }));
 
 // ==================== Chat Store ====================

@@ -5,6 +5,7 @@ import { useAuthStore } from "@/stores";
 import { profileApi, filesApi } from "@/lib/api";
 import { downloadAndCacheAvatar, getCachedAvatarUrl } from "@/lib/avatarCache";
 import type { Contact } from "@/crypto/storage";
+import { vaultHasKeys } from "@/crypto/keyVault";
 
 const AVATAR_FETCH_CONCURRENCY = 5;
 
@@ -34,11 +35,11 @@ async function parallelMap<T, R>(
  * Returns a Map<contactId, objectURL>.
  */
 export function useContactAvatars(contacts: Contact[]): Record<string, string> {
-  const identityKeys = useAuthStore((s) => s.identityKeys);
+  const hasKeys = useAuthStore((s) => s.hasIdentityKeys);
   const [avatarMap, setAvatarMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    if (!identityKeys || contacts.length === 0) return;
+    if (!vaultHasKeys() || contacts.length === 0) return;
     let cancelled = false;
 
     (async () => {
@@ -48,7 +49,7 @@ export function useContactAvatars(contacts: Contact[]): Record<string, string> {
           if (cancelled) return;
 
           try {
-            const res = await profileApi.get(contact.id, identityKeys);
+            const res = await profileApi.get(contact.id);
             if (cancelled || !res.data?.avatarFileId) return;
 
             const fid = res.data.avatarFileId;
@@ -58,9 +59,8 @@ export function useContactAvatars(contacts: Contact[]): Record<string, string> {
               return;
             }
 
-            const keys = identityKeys;
             const url = await downloadAndCacheAvatar(fid, async () => {
-              const r = await filesApi.download(fid, keys);
+              const r = await filesApi.download(fid);
               if (!r.data) return null;
               return { data: r.data.data, mimeHint: r.data.mimeHint };
             });
@@ -78,7 +78,7 @@ export function useContactAvatars(contacts: Contact[]): Record<string, string> {
     return () => {
       cancelled = true;
     };
-  }, [contacts, identityKeys]);
+  }, [contacts, hasKeys]);
 
   return avatarMap;
 }

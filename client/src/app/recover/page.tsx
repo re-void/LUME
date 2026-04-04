@@ -15,6 +15,7 @@ import {
   savePinHash,
 } from "@/crypto/storage";
 import { useAuthStore } from "@/stores";
+import { vaultSetAuth, vaultClear } from "@/crypto/keyVault";
 import { authApi } from "@/lib/api";
 import { generatePreKeyBundle } from "@/crypto/keys";
 
@@ -70,23 +71,28 @@ export default function RecoverPage() {
     try {
       const trimmed = mnemonic.trim().toLowerCase();
       const identity = await recoverIdentityFromMnemonic(trimmed);
+
+      // Derive master key from PIN early — needed for vault before API calls
+      const masterKey = await deriveMasterKeyFromPin(pin);
+
+      // Set vault early so API calls can sign requests via vault
+      vaultSetAuth(identity, masterKey);
+
       const { data, error: getUserError } = await authApi.getUser(
         username,
-        identity,
       );
 
       if (getUserError || !data) {
+        vaultClear();
         setError("Account not found on server");
         return;
       }
 
       if (data.identityKey !== identity.signing.publicKey) {
+        vaultClear();
         setError("Recovery phrase does not match this username");
         return;
       }
-
-      // Derive master key from PIN — PIN is only used here, never stored
-      const masterKey = await deriveMasterKeyFromPin(pin);
 
       await saveIdentityKeys(identity, masterKey);
       await savePinHash(pin);
@@ -115,7 +121,6 @@ export default function RecoverPage() {
         data.id,
         preKeyBundle.signedPreKey.publicKey,
         preKeyBundle.signature,
-        identity,
       );
       if (rotateError) {
         if (process.env.NODE_ENV !== "production")
@@ -132,7 +137,6 @@ export default function RecoverPage() {
             id: `recovery-prekey-${Date.now()}-${i}`,
             publicKey: key.publicKey,
           })),
-          identity,
         );
       } catch (uploadError) {
         if (process.env.NODE_ENV !== "production")
@@ -142,9 +146,10 @@ export default function RecoverPage() {
       setMnemonic("");
       setPin("");
       setPinConfirm("");
-      setAuth(data.id, data.username, identity, masterKey);
+      setAuth(data.id, data.username);
       router.push("/chats");
     } catch (recoverError) {
+      vaultClear();
       if (process.env.NODE_ENV !== "production")
         console.error("Recovery error:", recoverError);
       setError("Recovery error");

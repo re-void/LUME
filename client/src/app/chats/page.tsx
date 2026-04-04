@@ -53,8 +53,7 @@ export default function ChatsPage() {
 
   const { hydrated } = useMessengerSync();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const identityKeys = useAuthStore((s) => s.identityKeys);
-  const masterKey = useAuthStore((s) => s.masterKey);
+  const hasIdentityKeys = useAuthStore((s) => s.hasIdentityKeys);
   const contacts = useContactsStore((s) => s.contacts);
   const chats = useChatsStore((s) => s.chats);
   const activeChatId = useChatsStore((s) => s.activeChatId);
@@ -90,14 +89,14 @@ export default function ChatsPage() {
 
   // Fetch groups on mount / when identity keys become available
   useEffect(() => {
-    if (!identityKeys) return;
+    if (!hasIdentityKeys) return;
     void (async () => {
-      const result = await groupsApi.list(identityKeys);
+      const result = await groupsApi.list();
       if (result.data?.groups) {
         setGroups(result.data.groups);
       }
     })();
-  }, [identityKeys, setGroups]);
+  }, [hasIdentityKeys, setGroups]);
 
   if (!hydrated) {
     return (
@@ -262,7 +261,6 @@ export default function ChatsPage() {
       <BackupModal
         isOpen={showBackupModal}
         onClose={() => setShowBackupModal(false)}
-        masterKey={masterKey}
       />
     </div>
   );

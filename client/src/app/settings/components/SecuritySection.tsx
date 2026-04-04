@@ -7,7 +7,7 @@
 import { useState } from "react";
 import { Button, Input, Modal } from "@/components/ui";
 import { changePin } from "@/crypto/storage";
-import { useAuthStore } from "@/stores";
+import { vaultSetMasterKey } from "@/crypto/keyVault";
 import { SectionHeading } from "./shared";
 
 interface SecuritySectionProps {
@@ -53,7 +53,7 @@ export default function SecuritySection({
     setPinLoading(true);
     try {
       const newMasterKey = await changePin(currentPin, newPin);
-      useAuthStore.getState().setMasterKey(newMasterKey);
+      vaultSetMasterKey(newMasterKey);
       setPinSuccess(true);
       onBackupWarning(true);
       setTimeout(() => {

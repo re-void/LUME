@@ -50,6 +50,14 @@ CLAUDE.md
 GEMINI_SECURITY_AUDIT.md
 changelog.txt
 
+# AI agent workspace
+.ai/
+.agents/
+REVIEW.md
+
+# Root lockfile (each workspace has its own)
+package-lock.json
+
 # Internal dev scripts (not public)
 server/scripts/
 client/scripts/

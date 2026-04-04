@@ -9,12 +9,11 @@ import { v4 as uuidv4 } from "uuid";
 import { useAuthStore, useContactsStore, useChatsStore } from "@/stores";
 import { authApi } from "@/lib/api";
 import { saveContacts, type Contact } from "@/crypto/storage";
+import { vaultGetMasterKey, vaultHasKeys } from "@/crypto/keyVault";
 
 export function useContactActions() {
   const router = useRouter();
   const username = useAuthStore((s) => s.username);
-  const masterKey = useAuthStore((s) => s.masterKey);
-  const identityKeys = useAuthStore((s) => s.identityKeys);
   const addContact = useContactsStore((s) => s.addContact);
   const addChat = useChatsStore((s) => s.addChat);
   const setActiveChat = useChatsStore((s) => s.setActiveChat);
@@ -52,11 +51,11 @@ export function useContactActions() {
 
     try {
       const normalized = newContactUsername.trim();
-      if (!identityKeys) {
+      if (!vaultHasKeys()) {
         setAddContactError("Not authenticated");
         return;
       }
-      const { data, error } = await authApi.getUser(normalized, identityKeys);
+      const { data, error } = await authApi.getUser(normalized);
       if (error || !data) {
         setAddContactError("User not found");
         return;
@@ -88,8 +87,11 @@ export function useContactActions() {
       addContact(newContact);
       const updatedContacts = useContactsStore.getState().contacts;
 
-      if (masterKey) {
-        await saveContacts(updatedContacts, masterKey);
+      try {
+        const mk = vaultGetMasterKey();
+        await saveContacts(updatedContacts, mk);
+      } catch {
+        // Vault may not have master key yet — contacts still added in-memory
       }
 
       setShowAddContact(false);
@@ -106,8 +108,6 @@ export function useContactActions() {
   }, [
     newContactUsername,
     username,
-    masterKey,
-    identityKeys,
     addContact,
     openChatForContact,
   ]);

@@ -5,7 +5,8 @@ import { Modal, Button, Input } from "@/components/ui";
 import { Avatar } from "@/components/ui/Avatar";
 import { groupsApi } from "@/lib/api";
 import type { GroupData } from "@/lib/api";
-import { useAuthStore, useContactsStore, useGroupsStore } from "@/stores";
+import { useContactsStore, useGroupsStore } from "@/stores";
+import { vaultHasKeys } from "@/crypto/keyVault";
 
 interface CreateGroupModalProps {
   isOpen: boolean;
@@ -18,7 +19,6 @@ export default function CreateGroupModal({
   isOpen,
   onClose,
 }: CreateGroupModalProps) {
-  const identityKeys = useAuthStore((s) => s.identityKeys);
   const contacts = useContactsStore((s) => s.contacts);
   const addGroup = useGroupsStore((s) => s.addGroup);
 
@@ -66,7 +66,7 @@ export default function CreateGroupModal({
       setError("Select at least 1 member");
       return;
     }
-    if (!identityKeys) {
+    if (!vaultHasKeys()) {
       setError("Authentication required");
       return;
     }
@@ -77,7 +77,6 @@ export default function CreateGroupModal({
     const result = await groupsApi.create(
       name,
       Array.from(selectedIds),
-      identityKeys
     );
 
     if (result.error) {

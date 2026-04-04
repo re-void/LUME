@@ -7,6 +7,7 @@ import { Avatar } from '@/components/ui';
 import { profileApi, filesApi } from '@/lib/api';
 import { downloadAndCacheAvatar, getCachedAvatarUrl } from '@/lib/avatarCache';
 import ThemeToggle from '@/components/theme/ThemeToggle';
+import { vaultHasKeys } from '@/crypto/keyVault';
 
 function NavTile({
   active,
@@ -59,7 +60,7 @@ export default function LeftRail({ onPanic, onOpenBackup }: { onPanic?: () => vo
   const userId = useAuthStore((s) => s.userId);
   const username = useAuthStore((s) => s.username);
   const discoverable = useAuthStore((s) => s.discoverable);
-  const identityKeys = useAuthStore((s) => s.identityKeys);
+  const hasKeys = useAuthStore((s) => s.hasIdentityKeys);
   const wsStatus = useUIStore((s) => s.wsStatus);
   const totalUnread = useChatsStore((s) => s.chats.reduce((sum, c) => sum + (c.unreadCount || 0), 0));
 
@@ -67,12 +68,12 @@ export default function LeftRail({ onPanic, onOpenBackup }: { onPanic?: () => vo
 
   // Load own avatar
   useEffect(() => {
-    if (!userId || !identityKeys) return;
+    if (!userId || !vaultHasKeys()) return;
     let cancelled = false;
 
     (async () => {
       try {
-        const res = await profileApi.get(userId, identityKeys);
+        const res = await profileApi.get(userId);
         if (cancelled || !res.data?.avatarFileId) return;
 
         const fid = res.data.avatarFileId;
@@ -82,9 +83,8 @@ export default function LeftRail({ onPanic, onOpenBackup }: { onPanic?: () => vo
           return;
         }
 
-        const keys = identityKeys;
         const url = await downloadAndCacheAvatar(fid, async () => {
-          const r = await filesApi.download(fid, keys);
+          const r = await filesApi.download(fid);
           if (!r.data) return null;
           return { data: r.data.data, mimeHint: r.data.mimeHint };
         });
@@ -95,7 +95,7 @@ export default function LeftRail({ onPanic, onOpenBackup }: { onPanic?: () => vo
     })();
 
     return () => { cancelled = true; };
-  }, [userId, identityKeys]);
+  }, [userId, hasKeys]);
 
   const messengerActive = pathname.startsWith('/chat') || pathname.startsWith('/chats');
   const statusLabel = wsStatus === 'connected' ? 'Online' : wsStatus === 'connecting' ? 'Connecting' : 'Offline';

@@ -37,7 +37,7 @@ export default function DangerZoneSection() {
       const uid = useAuthStore.getState().userId;
       if (identity && uid) {
         try {
-          await authApi.deleteAccount(uid, identity);
+          await authApi.deleteAccount(uid);
         } catch {
           // Best effort.
         }
