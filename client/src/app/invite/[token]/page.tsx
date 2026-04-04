@@ -17,6 +17,7 @@ import {
   useContactsStore,
   useChatsStore,
 } from "@/stores";
+import { vaultHasKeys, vaultGetMasterKey } from "@/crypto/keyVault";
 
 type InviteState =
   | { status: "loading" }
@@ -39,8 +40,7 @@ export default function InvitePage() {
   const token = params.token as string;
 
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const identityKeys = useAuthStore((s) => s.identityKeys);
-  const masterKey = useAuthStore((s) => s.masterKey);
+  const hasIdentityKeys = useAuthStore((s) => s.hasIdentityKeys);
   const username = useAuthStore((s) => s.username);
 
   const [state, setState] = useState<InviteState>({ status: "loading" });
@@ -48,7 +48,7 @@ export default function InvitePage() {
 
   // Resolve the invite token
   useEffect(() => {
-    if (!isAuthenticated || !identityKeys) {
+    if (!isAuthenticated || !vaultHasKeys()) {
       // Store token for after login
       sessionStorage.setItem("lume:pending-invite", token);
       router.push("/");
@@ -58,7 +58,7 @@ export default function InvitePage() {
     let cancelled = false;
 
     async function resolve() {
-      const result = await inviteApi.resolveToken(token, identityKeys!);
+      const result = await inviteApi.resolveToken(token);
       if (cancelled) return;
 
       if (result.error) {
@@ -91,7 +91,7 @@ export default function InvitePage() {
     return () => {
       cancelled = true;
     };
-  }, [token, isAuthenticated, identityKeys, router]);
+  }, [token, isAuthenticated, hasIdentityKeys, router]);
 
   const handleAddContact = useCallback(async () => {
     if (state.status !== "resolved") return;
@@ -139,8 +139,11 @@ export default function InvitePage() {
       useContactsStore.getState().addContact(newContact);
       const updatedContacts = useContactsStore.getState().contacts;
 
-      if (masterKey) {
-        await saveContacts(updatedContacts, masterKey);
+      try {
+        const mk = vaultGetMasterKey();
+        await saveContacts(updatedContacts, mk);
+      } catch {
+        // Vault may not have master key — contacts still added in-memory
       }
 
       const chatId = uuidv4();
@@ -159,7 +162,7 @@ export default function InvitePage() {
     } finally {
       setAdding(false);
     }
-  }, [state, username, masterKey, router]);
+  }, [state, username, router]);
 
   return (
     <main className="auth-shell">

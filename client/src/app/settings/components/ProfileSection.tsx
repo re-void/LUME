@@ -10,6 +10,7 @@ import { useAuthStore } from "@/stores";
 import { profileApi, filesApi } from "@/lib/api";
 import { downloadAndCacheAvatar, getCachedAvatarUrl } from "@/lib/avatarCache";
 import { SectionHeading } from "./shared";
+import { vaultHasKeys } from "@/crypto/keyVault";
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2 MB
 const ACCEPTED_TYPES = ["image/png", "image/jpeg", "image/webp"];
@@ -18,7 +19,7 @@ export default function ProfileSection() {
   const userId = useAuthStore((s) => s.userId);
   const username = useAuthStore((s) => s.username);
   const discoverable = useAuthStore((s) => s.discoverable);
-  const identityKeys = useAuthStore((s) => s.identityKeys);
+  const hasKeys = useAuthStore((s) => s.hasIdentityKeys);
 
   const [displayName, setDisplayName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -35,12 +36,12 @@ export default function ProfileSection() {
 
   // Load profile on mount
   useEffect(() => {
-    if (!userId || !identityKeys) return;
+    if (!userId || !vaultHasKeys()) return;
 
     let cancelled = false;
     (async () => {
       try {
-        const res = await profileApi.get(userId, identityKeys);
+        const res = await profileApi.get(userId);
         if (cancelled || !res.data) return;
         setDisplayName(res.data.displayName ?? "");
         setAvatarFileId(res.data.avatarFileId ?? null);
@@ -51,9 +52,8 @@ export default function ProfileSection() {
           if (cached) {
             setAvatarUrl(cached);
           } else {
-            const keys = identityKeys;
             const url = await downloadAndCacheAvatar(fid, async () => {
-              const r = await filesApi.download(fid, keys);
+              const r = await filesApi.download(fid);
               if (!r.data) return null;
               return { data: r.data.data, mimeHint: r.data.mimeHint };
             });
@@ -68,11 +68,11 @@ export default function ProfileSection() {
     })();
 
     return () => { cancelled = true; };
-  }, [userId, identityKeys]);
+  }, [userId, hasKeys]);
 
   const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !userId || !identityKeys) return;
+    if (!file || !userId || !vaultHasKeys()) return;
     // Reset the input so same file can be selected again
     e.target.value = "";
 
@@ -99,7 +99,7 @@ export default function ProfileSection() {
       const base64 = btoa(binary);
 
       // Upload file
-      const uploadRes = await filesApi.upload(base64, file.type, identityKeys);
+      const uploadRes = await filesApi.upload(base64, file.type);
       if (uploadRes.error || !uploadRes.data) {
         setError(uploadRes.error ?? "Upload failed.");
         return;
@@ -108,7 +108,7 @@ export default function ProfileSection() {
       const newFileId = uploadRes.data.fileId;
 
       // Update profile with new avatarFileId
-      const updateRes = await profileApi.update(userId, { avatarFileId: newFileId }, identityKeys);
+      const updateRes = await profileApi.update(userId, { avatarFileId: newFileId });
       if (updateRes.error) {
         setError(updateRes.error);
         return;
@@ -125,15 +125,15 @@ export default function ProfileSection() {
     } finally {
       setUploading(false);
     }
-  }, [userId, identityKeys]);
+  }, [userId, hasKeys]);
 
   const saveDisplayName = useCallback(async () => {
-    if (!userId || !identityKeys) return;
+    if (!userId || !vaultHasKeys()) return;
     const name = displayNameRef.current.trim();
     setSaving(true);
     setError(null);
     try {
-      const res = await profileApi.update(userId, { displayName: name || null }, identityKeys);
+      const res = await profileApi.update(userId, { displayName: name || null });
       if (res.error) {
         setError(res.error);
         return;
@@ -145,7 +145,7 @@ export default function ProfileSection() {
     } finally {
       setSaving(false);
     }
-  }, [userId, identityKeys]);
+  }, [userId]);
 
   if (!loaded) {
     return (

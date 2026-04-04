@@ -17,6 +17,7 @@ import {
   resetPinFailures,
 } from "@/crypto/storage";
 import { useAuthStore } from "@/stores";
+import { vaultSetAuth, vaultClear } from "@/crypto/keyVault";
 import { authApi, profileApi } from "@/lib/api";
 import { generatePreKeyBundle } from "@/crypto/keys";
 import { checkAndRotateSpk, backfillSpkCreatedAt } from "@/crypto/spkRotation";
@@ -90,6 +91,9 @@ export default function UnlockPage() {
 
       await resetPinFailures();
 
+      // Set vault keys early so API calls (which sign via vault) work
+      vaultSetAuth(identity, masterKey);
+
       const settings = await loadSettings();
       let resolvedUserId = settings.userId;
       let resolvedUsername = settings.username?.replace(/^@+/, "").trim();
@@ -99,11 +103,11 @@ export default function UnlockPage() {
       if (resolvedUsername) {
         const { data: serverUser, error: serverError } = await authApi.getUser(
           resolvedUsername,
-          identity,
         );
 
         if (serverUser) {
           if (serverUser.identityKey !== identity.signing.publicKey) {
+            vaultClear();
             errorFeedback();
             setShaking(true);
             setError(
@@ -128,6 +132,7 @@ export default function UnlockPage() {
         } else if (serverError === "User not found") {
           // Server DB was reset or the account was deleted.
           // Show a warning before re-registering — existing contacts won't be able to decrypt old messages.
+          vaultClear();
           setPendingIdentity(identity);
           setShowReRegisterWarning(true);
           return;
@@ -135,6 +140,7 @@ export default function UnlockPage() {
       }
 
       if (!resolvedUserId || !resolvedUsername) {
+        vaultClear();
         errorFeedback();
         setShaking(true);
         setError("Profile missing. Recover account with phrase.");
@@ -154,7 +160,6 @@ export default function UnlockPage() {
       const spkResult = await checkAndRotateSpk(
         masterKey,
         resolvedUserId,
-        identity,
       );
       if (spkResult.error) {
         if (process.env.NODE_ENV !== "production")
@@ -162,10 +167,10 @@ export default function UnlockPage() {
       }
 
       successFeedback();
-      setAuth(resolvedUserId, resolvedUsername, identity, masterKey);
+      setAuth(resolvedUserId, resolvedUsername);
 
       // Fetch discoverable state
-      void profileApi.get(resolvedUserId, identity).then((profileResult) => {
+      void profileApi.get(resolvedUserId).then((profileResult) => {
         if (profileResult.data?.discoverable !== undefined) {
           useAuthStore.getState().setDiscoverable(profileResult.data.discoverable);
         }
@@ -248,7 +253,8 @@ export default function UnlockPage() {
         username: created.username,
       });
 
-      setAuth(created.id, created.username, pendingIdentity, reRegMasterKey);
+      vaultSetAuth(pendingIdentity, reRegMasterKey);
+      setAuth(created.id, created.username);
       router.push("/chats");
     } catch (e) {
       console.error("Re-register error:", e);

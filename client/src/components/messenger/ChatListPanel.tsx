@@ -3,9 +3,10 @@
 import React, { memo, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Chat } from '@/stores';
-import { useAuthStore, useBlockedStore, useChatsStore, useGroupsStore, useUIStore } from '@/stores';
+import { useBlockedStore, useChatsStore, useGroupsStore, useUIStore } from '@/stores';
 import type { GroupData } from '@/lib/api';
 import { loadSettings, verifyHiddenChatPin, isLegacyHiddenPinHash, hashHiddenChatPin, saveSettings, type Contact } from '@/crypto/storage';
+import { vaultGetMasterKey, vaultHasMasterKey } from '@/crypto/keyVault';
 import { Avatar, Button, Input, Modal } from '@/components/ui';
 
 function formatTime(timestamp?: number) {
@@ -216,7 +217,6 @@ export default function ChatListPanel({
   avatarMap?: Record<string, string>;
 }) {
   const router = useRouter();
-  const masterKey = useAuthStore((s) => s.masterKey);
   const showHiddenChats = useUIStore((s) => s.showHiddenChats);
   const setShowHiddenChats = useUIStore((s) => s.setShowHiddenChats);
   const setChatHidden = useChatsStore((s) => s.setChatHidden);
@@ -233,7 +233,8 @@ export default function ChatListPanel({
 
   const reloadSettings = useCallback(async () => {
     try {
-      const settings = await loadSettings(masterKey ?? undefined);
+      const mk = vaultHasMasterKey() ? vaultGetMasterKey() : undefined;
+      const settings = await loadSettings(mk);
       setHiddenChatsEnabled(!!settings.hiddenChatsEnabled);
       setHiddenChatPinHash(settings.hiddenChatPinHash || null);
       if (!settings.hiddenChatsEnabled) {
@@ -242,7 +243,7 @@ export default function ChatListPanel({
     } catch {
       // ignore
     }
-  }, [masterKey, setShowHiddenChats]);
+  }, [setShowHiddenChats]);
 
   // Initial load
   useEffect(() => {

@@ -154,12 +154,11 @@ beforeEach(() => {
     isAuthenticated: false,
     userId: null,
     username: null,
-    identityKeys: null,
-    masterKey: null,
+    hasIdentityKeys: false,
   });
   useContactsStore.setState({ contacts: [] });
   useChatsStore.setState({ chats: [], activeChatId: null });
-  useSessionsStore.setState({ sessions: {} });
+  useSessionsStore.setState({ sessionContactIds: [] });
   useUIStore.setState({
     isPanicMode: false,
     showHiddenChats: false,

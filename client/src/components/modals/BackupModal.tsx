@@ -4,17 +4,16 @@ import { useState, useRef } from "react";
 import { Modal, Button } from "@/components/ui";
 import { exportEncryptedBackup, importEncryptedBackup } from "@/crypto/storage";
 import { reconcileRestoreConsistency } from "@/lib/settingsConsistency";
+import { vaultGetMasterKey, vaultHasMasterKey } from "@/crypto/keyVault";
 
 interface BackupModalProps {
   isOpen: boolean;
   onClose: () => void;
-  masterKey: Uint8Array | null;
 }
 
 export default function BackupModal({
   isOpen,
   onClose,
-  masterKey,
 }: BackupModalProps) {
   const [backupStatus, setBackupStatus] = useState<string | null>(null);
   const [backupLoading, setBackupLoading] = useState(false);
@@ -51,14 +50,14 @@ export default function BackupModal({
           fullWidth
           loading={backupLoading}
           onClick={async () => {
-            if (!masterKey || !backupPin) {
+            if (!vaultHasMasterKey() || !backupPin) {
               setBackupStatus("Enter your PIN to export backup.");
               return;
             }
             setBackupStatus(null);
             setBackupLoading(true);
             try {
-              const data = await exportEncryptedBackup(masterKey, backupPin);
+              const data = await exportEncryptedBackup(vaultGetMasterKey(), backupPin);
               const blob = new Blob([data], { type: "application/octet-stream" });
               const url = URL.createObjectURL(blob);
               const a = document.createElement("a");

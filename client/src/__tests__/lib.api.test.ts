@@ -1,38 +1,30 @@
 /**
  * Tests for lib/api.ts
  * Covers: request() helper, authApi, messagesApi, healthApi
- * Mocks: global.fetch, crypto/keys sign, tweetnacl-util encodeBase64
+ * Mocks: global.fetch, crypto/keyVault vaultSignRequest
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// ── Hoisted mocks ────────────────────────────────────────────────────────────
+// ── Hoisted mocks ───────────────��────────────────────────────────────────────
 
 const mocks = vi.hoisted(() => ({
-  sign: vi.fn(() => new Uint8Array(64)),
-  encodeBase64: vi.fn(() => 'mock-base64-signature'),
+  vaultSignRequest: vi.fn((_method: string, path: string) => ({
+    'X-Lume-Identity-Key': 'test-signing-pk',
+    'X-Lume-Signature': 'mock-base64-signature',
+    'X-Lume-Timestamp': Date.now().toString(),
+    'X-Lume-Nonce': 'mock-nonce',
+    'X-Lume-Path': path.startsWith('/') ? path : `/${path}`,
+  })),
 }));
 
-vi.mock('@/crypto/keys', () => ({
-  sign: mocks.sign,
-}));
-
-vi.mock('tweetnacl-util', () => ({
-  encodeBase64: mocks.encodeBase64,
-  decodeBase64: vi.fn(),
+vi.mock('@/crypto/keyVault', () => ({
+  vaultSignRequest: mocks.vaultSignRequest,
 }));
 
 import { authApi, messagesApi, healthApi } from '@/lib/api';
-import type { IdentityKeys } from '@/crypto/keys';
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function makeIdentityKeys(): IdentityKeys {
-  return {
-    signing: { publicKey: 'test-signing-pk', secretKey: 'test-signing-sk' },
-    exchange: { publicKey: 'test-exchange-pk', secretKey: 'test-exchange-sk' },
-  };
-}
+// ── Helpers ─────────────────────────────────────��────────────────────────────
 
 function jsonResponse(body: unknown, status = 200, headers?: Record<string, string>) {
   return new Response(JSON.stringify(body), {
@@ -48,15 +40,14 @@ function textResponse(body: string, status = 200) {
   });
 }
 
-// ── Setup ────────────────────────────────────────────────────────────────────
+// ── Setup ──────────────────────────────────────────────────���─────────────────
 
 const fetchSpy = vi.fn<(...args: unknown[]) => Promise<Response>>();
 
 beforeEach(() => {
   vi.stubGlobal('fetch', fetchSpy);
   fetchSpy.mockReset();
-  mocks.sign.mockReturnValue(new Uint8Array(64));
-  mocks.encodeBase64.mockReturnValue('mock-base64-signature');
+  mocks.vaultSignRequest.mockClear();
 });
 
 afterEach(() => {
@@ -131,8 +122,6 @@ describe('request() core', () => {
     resp.json = async () => {
       if (!called) {
         called = true;
-        // The response body has already been read if we got text, so let's
-        // just have the original fail naturally.
         return origJson();
       }
       throw new Error('bad json');
@@ -141,7 +130,6 @@ describe('request() core', () => {
 
     const result = await healthApi.check();
 
-    // The body "not-json!!!" will fail JSON.parse, returning "Invalid server response"
     expect(result.error).toBe('Invalid server response');
   });
 
@@ -150,7 +138,6 @@ describe('request() core', () => {
 
     const result = await healthApi.check();
 
-    // non-ok is false (200), but content is not JSON - data.error from text parsing
     expect(result.data).toEqual({ error: 'Short error' });
   });
 
@@ -164,7 +151,7 @@ describe('request() core', () => {
   });
 });
 
-// ── authApi ──────────────────────────────────────────────────────────────────
+// ── authApi ─────────��────────────────────────────��───────────────────────────
 
 describe('authApi', () => {
   describe('register', () => {
@@ -200,13 +187,12 @@ describe('authApi', () => {
   });
 
   describe('getUser', () => {
-    it('signs the request and sends GET', async () => {
-      const keys = makeIdentityKeys();
+    it('signs the request via vault and sends GET', async () => {
       fetchSpy.mockResolvedValue(jsonResponse({ id: 'u1', username: 'bob' }));
 
-      await authApi.getUser('bob', keys);
+      await authApi.getUser('bob');
 
-      expect(mocks.sign).toHaveBeenCalled();
+      expect(mocks.vaultSignRequest).toHaveBeenCalledWith('GET', '/auth/user/bob', {});
       const [url, opts] = fetchSpy.mock.calls[0] as [string, RequestInit];
       expect(url).toContain('/auth/user/bob');
       const headers = opts.headers as Record<string, string>;
@@ -219,10 +205,9 @@ describe('authApi', () => {
 
   describe('getBundle', () => {
     it('sends signed POST with username in body', async () => {
-      const keys = makeIdentityKeys();
       fetchSpy.mockResolvedValue(jsonResponse({ id: 'u1' }));
 
-      await authApi.getBundle('bob', keys);
+      await authApi.getBundle('bob');
 
       const [url, opts] = fetchSpy.mock.calls[0] as [string, RequestInit];
       expect(url).toContain('/auth/bundle');
@@ -233,10 +218,9 @@ describe('authApi', () => {
 
   describe('uploadPrekeys', () => {
     it('sends signed POST with prekeys payload', async () => {
-      const keys = makeIdentityKeys();
       fetchSpy.mockResolvedValue(jsonResponse({ message: 'ok', totalPrekeys: 10 }));
 
-      const result = await authApi.uploadPrekeys('u1', [{ id: 'k1', publicKey: 'pk1' }], keys);
+      const result = await authApi.uploadPrekeys('u1', [{ id: 'k1', publicKey: 'pk1' }]);
 
       const [, opts] = fetchSpy.mock.calls[0] as [string, RequestInit];
       expect(JSON.parse(opts.body as string)).toEqual({
@@ -249,10 +233,9 @@ describe('authApi', () => {
 
   describe('updateSignedPrekey', () => {
     it('sends signed POST', async () => {
-      const keys = makeIdentityKeys();
       fetchSpy.mockResolvedValue(jsonResponse({ message: 'ok' }));
 
-      await authApi.updateSignedPrekey('u1', 'spk', 'sig', keys);
+      await authApi.updateSignedPrekey('u1', 'spk', 'sig');
 
       const [url, opts] = fetchSpy.mock.calls[0] as [string, RequestInit];
       expect(url).toContain('/auth/keys');
@@ -266,10 +249,9 @@ describe('authApi', () => {
 
   describe('deleteAccount', () => {
     it('sends signed DELETE', async () => {
-      const keys = makeIdentityKeys();
       fetchSpy.mockResolvedValue(jsonResponse({ message: 'deleted' }));
 
-      await authApi.deleteAccount('u1', keys);
+      await authApi.deleteAccount('u1');
 
       const [url, opts] = fetchSpy.mock.calls[0] as [string, RequestInit];
       expect(url).toContain('/auth/user/u1');
@@ -279,10 +261,9 @@ describe('authApi', () => {
 
   describe('getSession', () => {
     it('sends signed POST and returns token', async () => {
-      const keys = makeIdentityKeys();
       fetchSpy.mockResolvedValue(jsonResponse({ token: 'jwt-token', expiresIn: 3600 }));
 
-      const result = await authApi.getSession('u1', keys);
+      const result = await authApi.getSession('u1');
 
       expect(result.data?.token).toBe('jwt-token');
       expect(result.data?.expiresIn).toBe(3600);
@@ -291,10 +272,9 @@ describe('authApi', () => {
 
   describe('blockUser / unblockUser / getBlockedUsers', () => {
     it('blockUser sends signed POST', async () => {
-      const keys = makeIdentityKeys();
       fetchSpy.mockResolvedValue(jsonResponse({ ok: true }));
 
-      const result = await authApi.blockUser('blocked-id', keys);
+      const result = await authApi.blockUser('blocked-id');
 
       const [url, opts] = fetchSpy.mock.calls[0] as [string, RequestInit];
       expect(url).toContain('/auth/block');
@@ -303,20 +283,18 @@ describe('authApi', () => {
     });
 
     it('unblockUser sends signed POST', async () => {
-      const keys = makeIdentityKeys();
       fetchSpy.mockResolvedValue(jsonResponse({ ok: true }));
 
-      await authApi.unblockUser('blocked-id', keys);
+      await authApi.unblockUser('blocked-id');
 
       const [url] = fetchSpy.mock.calls[0] as [string];
       expect(url).toContain('/auth/unblock');
     });
 
     it('getBlockedUsers sends signed GET', async () => {
-      const keys = makeIdentityKeys();
       fetchSpy.mockResolvedValue(jsonResponse({ blockedIds: ['a', 'b'] }));
 
-      const result = await authApi.getBlockedUsers(keys);
+      const result = await authApi.getBlockedUsers();
 
       const [url] = fetchSpy.mock.calls[0] as [string];
       expect(url).toContain('/auth/blocked');
@@ -325,17 +303,15 @@ describe('authApi', () => {
   });
 });
 
-// ── messagesApi ──────────────────────────────────────────────────────────────
+// ── messagesApi ───────��─────────────────────────────────────────��────────────
 
 describe('messagesApi', () => {
-  const keys = makeIdentityKeys();
-
   describe('send', () => {
     it('sends signed POST with message data', async () => {
       fetchSpy.mockResolvedValue(jsonResponse({ messageId: 'm1', delivered: true }));
 
       const data = { senderId: 'u1', recipientUsername: 'bob', encryptedPayload: 'enc' };
-      const result = await messagesApi.send(data, keys);
+      const result = await messagesApi.send(data);
 
       const [url, opts] = fetchSpy.mock.calls[0] as [string, RequestInit];
       expect(url).toContain('/messages/send');
@@ -348,7 +324,7 @@ describe('messagesApi', () => {
     it('sends signed GET', async () => {
       fetchSpy.mockResolvedValue(jsonResponse({ messages: [] }));
 
-      const result = await messagesApi.getPending('u1', keys);
+      const result = await messagesApi.getPending('u1');
 
       const [url] = fetchSpy.mock.calls[0] as [string];
       expect(url).toContain('/messages/pending/u1');
@@ -360,7 +336,7 @@ describe('messagesApi', () => {
     it('sends signed DELETE', async () => {
       fetchSpy.mockResolvedValue(jsonResponse({ message: 'ack' }));
 
-      await messagesApi.acknowledge('m1', keys);
+      await messagesApi.acknowledge('m1');
 
       const [url, opts] = fetchSpy.mock.calls[0] as [string, RequestInit];
       expect(url).toContain('/messages/m1');
@@ -372,7 +348,7 @@ describe('messagesApi', () => {
     it('sends signed POST with messageIds', async () => {
       fetchSpy.mockResolvedValue(jsonResponse({ acknowledged: 3 }));
 
-      const result = await messagesApi.acknowledgeBatch(['m1', 'm2', 'm3'], keys);
+      const result = await messagesApi.acknowledgeBatch(['m1', 'm2', 'm3']);
 
       const [, opts] = fetchSpy.mock.calls[0] as [string, RequestInit];
       expect(JSON.parse(opts.body as string)).toEqual({ messageIds: ['m1', 'm2', 'm3'] });
@@ -381,14 +357,13 @@ describe('messagesApi', () => {
   });
 });
 
-// ── signRequest header validation ────────────────────────────────────────────
+// ── signRequest header validation ────���───────────────────────────────────────
 
 describe('signRequest headers', () => {
   it('includes all X-Lume-* headers on signed requests', async () => {
-    const keys = makeIdentityKeys();
     fetchSpy.mockResolvedValue(jsonResponse({ token: 'jwt' }));
 
-    await authApi.getSession('u1', keys);
+    await authApi.getSession('u1');
 
     const [, opts] = fetchSpy.mock.calls[0] as [string, RequestInit];
     const headers = opts.headers as Record<string, string>;

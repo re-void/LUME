@@ -2,8 +2,7 @@
  * API клиент для взаимодействия с сервером
  */
 
-import { sign, IdentityKeys } from '../crypto/keys';
-import { encodeBase64 } from 'tweetnacl-util';
+import { vaultSignRequest } from '@/crypto/keyVault';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
@@ -83,38 +82,6 @@ export interface UserBundle {
 }
 
 
-function signRequest(
-    method: string,
-    endpoint: string,
-    body: unknown,
-    identityKeys: IdentityKeys
-): Record<string, string> {
-    const timestamp = Date.now().toString();
-    const crypto = globalThis.crypto;
-    const nonce = (crypto && typeof (crypto as Crypto & { randomUUID?: () => string }).randomUUID === 'function')
-        ? (crypto as Crypto & { randomUUID: () => string }).randomUUID()
-        : (() => {
-            const bytes = new Uint8Array(16);
-            crypto.getRandomValues(bytes);
-            return `${Date.now()}-${Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('')}`;
-          })();
-    const normalizedMethod = method.toUpperCase();
-    const normalizedPath = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-    const bodyString = body && Object.keys(body as object).length > 0 ? JSON.stringify(body) : '';
-    const message = `${timestamp}.${nonce}.${normalizedMethod}.${normalizedPath}.${bodyString}`;
-
-    const messageBytes = new TextEncoder().encode(message);
-    const signature = sign(messageBytes, identityKeys.signing.secretKey);
-
-    return {
-        'X-Lume-Identity-Key': identityKeys.signing.publicKey,
-        'X-Lume-Signature': encodeBase64(signature),
-        'X-Lume-Timestamp': timestamp,
-        'X-Lume-Nonce': nonce,
-        'X-Lume-Path': normalizedPath,
-    };
-}
-
 export const authApi = {
     register: (data: RegisterData) =>
         request<{ id: string; username: string; message: string }>('/auth/register', {
@@ -125,16 +92,16 @@ export const authApi = {
     checkUsername: (username: string) =>
         request<{ available: boolean; reason?: string }>(`/auth/check/${username}`),
 
-    getUser: (username: string, identityKeys: IdentityKeys) => {
-        const headers = signRequest('GET', `/auth/user/${username}`, {}, identityKeys);
+    getUser: (username: string) => {
+        const headers = vaultSignRequest('GET', `/auth/user/${username}`, {});
         return request<UserBundle>(`/auth/user/${username}`, {
             headers,
         });
     },
 
-    getBundle: (username: string, identityKeys: IdentityKeys) => {
+    getBundle: (username: string) => {
         const body = { username };
-        const headers = signRequest('POST', '/auth/bundle', body, identityKeys);
+        const headers = vaultSignRequest('POST', '/auth/bundle', body);
         return request<UserBundle>('/auth/bundle', {
             method: 'POST',
             body: JSON.stringify(body),
@@ -142,9 +109,9 @@ export const authApi = {
         });
     },
 
-    uploadPrekeys: (userId: string, prekeys: Array<{ id: string; publicKey: string }>, identityKeys: IdentityKeys) => {
+    uploadPrekeys: (userId: string, prekeys: Array<{ id: string; publicKey: string }>) => {
         const body = { userId, prekeys };
-        const headers = signRequest('POST', '/auth/prekeys', body, identityKeys);
+        const headers = vaultSignRequest('POST', '/auth/prekeys', body);
         return request<{ message: string; totalPrekeys: number }>('/auth/prekeys', {
             method: 'POST',
             body: JSON.stringify(body),
@@ -156,10 +123,9 @@ export const authApi = {
         userId: string,
         signedPrekey: string,
         signedPrekeySignature: string,
-        identityKeys: IdentityKeys
     ) => {
         const body = { userId, signedPrekey, signedPrekeySignature };
-        const headers = signRequest('POST', '/auth/keys', body, identityKeys);
+        const headers = vaultSignRequest('POST', '/auth/keys', body);
         return request<{ message: string }>('/auth/keys', {
             method: 'POST',
             body: JSON.stringify(body),
@@ -167,17 +133,17 @@ export const authApi = {
         });
     },
 
-    deleteAccount: (userId: string, identityKeys: IdentityKeys) => {
-        const headers = signRequest('DELETE', `/auth/user/${userId}`, {}, identityKeys);
+    deleteAccount: (userId: string) => {
+        const headers = vaultSignRequest('DELETE', `/auth/user/${userId}`, {});
         return request<{ message: string }>(`/auth/user/${userId}`, {
             method: 'DELETE',
             headers,
         });
     },
 
-    getSession: (userId: string, identityKeys: IdentityKeys) => {
+    getSession: (userId: string) => {
         const body = { userId };
-        const headers = signRequest('POST', '/auth/session', body, identityKeys);
+        const headers = vaultSignRequest('POST', '/auth/session', body);
         return request<{ token: string; expiresIn: number }>('/auth/session', {
             method: 'POST',
             body: JSON.stringify(body),
@@ -185,9 +151,9 @@ export const authApi = {
         });
     },
 
-    blockUser: (blockedId: string, identityKeys: IdentityKeys) => {
+    blockUser: (blockedId: string) => {
         const body = { blockedId };
-        const headers = signRequest('POST', '/auth/block', body, identityKeys);
+        const headers = vaultSignRequest('POST', '/auth/block', body);
         return request<{ ok: boolean }>('/auth/block', {
             method: 'POST',
             body: JSON.stringify(body),
@@ -195,9 +161,9 @@ export const authApi = {
         });
     },
 
-    unblockUser: (blockedId: string, identityKeys: IdentityKeys) => {
+    unblockUser: (blockedId: string) => {
         const body = { blockedId };
-        const headers = signRequest('POST', '/auth/unblock', body, identityKeys);
+        const headers = vaultSignRequest('POST', '/auth/unblock', body);
         return request<{ ok: boolean }>('/auth/unblock', {
             method: 'POST',
             body: JSON.stringify(body),
@@ -205,8 +171,8 @@ export const authApi = {
         });
     },
 
-    getBlockedUsers: (identityKeys: IdentityKeys) => {
-        const headers = signRequest('GET', '/auth/blocked', {}, identityKeys);
+    getBlockedUsers: () => {
+        const headers = vaultSignRequest('GET', '/auth/blocked', {});
         return request<{ blockedIds: string[] }>('/auth/blocked', {
             headers,
         });
@@ -230,8 +196,8 @@ export interface PendingMessage {
 }
 
 export const messagesApi = {
-    send: (data: SendMessageData, identityKeys: IdentityKeys) => {
-        const headers = signRequest('POST', '/messages/send', data, identityKeys);
+    send: (data: SendMessageData) => {
+        const headers = vaultSignRequest('POST', '/messages/send', data);
         return request<{ messageId: string; delivered: boolean }>('/messages/send', {
             method: 'POST',
             body: JSON.stringify(data),
@@ -239,24 +205,24 @@ export const messagesApi = {
         });
     },
 
-    getPending: (userId: string, identityKeys: IdentityKeys) => {
-        const headers = signRequest('GET', `/messages/pending/${userId}`, {}, identityKeys);
+    getPending: (userId: string) => {
+        const headers = vaultSignRequest('GET', `/messages/pending/${userId}`, {});
         return request<{ messages: PendingMessage[] }>(`/messages/pending/${userId}`, {
             headers
         });
     },
 
-    acknowledge: (messageId: string, identityKeys: IdentityKeys) => {
-        const headers = signRequest('DELETE', `/messages/${messageId}`, {}, identityKeys);
+    acknowledge: (messageId: string) => {
+        const headers = vaultSignRequest('DELETE', `/messages/${messageId}`, {});
         return request<{ message: string }>(`/messages/${messageId}`, {
             method: 'DELETE',
             headers
         });
     },
 
-    acknowledgeBatch: (messageIds: string[], identityKeys: IdentityKeys) => {
+    acknowledgeBatch: (messageIds: string[]) => {
         const body = { messageIds };
-        const headers = signRequest('POST', '/messages/acknowledge', body, identityKeys);
+        const headers = vaultSignRequest('POST', '/messages/acknowledge', body);
         return request<{ acknowledged: number }>('/messages/acknowledge', {
             method: 'POST',
             body: JSON.stringify(body),
@@ -268,9 +234,9 @@ export const messagesApi = {
 // ==================== Files API ====================
 
 export const filesApi = {
-    upload: (data: string, mimeHint: string, identityKeys: IdentityKeys) => {
+    upload: (data: string, mimeHint: string) => {
         const body = { data, mimeHint };
-        const headers = signRequest('POST', '/files/upload', body, identityKeys);
+        const headers = vaultSignRequest('POST', '/files/upload', body);
         return request<{ fileId: string; size: number; expiresAt: number }>('/files/upload', {
             method: 'POST',
             body: JSON.stringify(body),
@@ -278,8 +244,8 @@ export const filesApi = {
         });
     },
 
-    download: (fileId: string, identityKeys: IdentityKeys) => {
-        const headers = signRequest('GET', `/files/${fileId}`, {}, identityKeys);
+    download: (fileId: string) => {
+        const headers = vaultSignRequest('GET', `/files/${fileId}`, {});
         return request<{ fileId: string; data: string; mimeHint: string; size: number }>(`/files/${fileId}`, {
             headers,
         });
@@ -297,9 +263,9 @@ export interface GroupData {
 }
 
 export const groupsApi = {
-    create: (name: string, memberIds: string[], identityKeys: IdentityKeys) => {
+    create: (name: string, memberIds: string[]) => {
         const body = { name, memberIds };
-        const headers = signRequest('POST', '/groups/create', body, identityKeys);
+        const headers = vaultSignRequest('POST', '/groups/create', body);
         return request<GroupData>('/groups/create', {
             method: 'POST',
             body: JSON.stringify(body),
@@ -307,23 +273,23 @@ export const groupsApi = {
         });
     },
 
-    list: (identityKeys: IdentityKeys) => {
-        const headers = signRequest('GET', '/groups', {}, identityKeys);
+    list: () => {
+        const headers = vaultSignRequest('GET', '/groups', {});
         return request<{ groups: GroupData[] }>('/groups', {
             headers,
         });
     },
 
-    get: (groupId: string, identityKeys: IdentityKeys) => {
-        const headers = signRequest('GET', `/groups/${groupId}`, {}, identityKeys);
+    get: (groupId: string) => {
+        const headers = vaultSignRequest('GET', `/groups/${groupId}`, {});
         return request<GroupData>(`/groups/${groupId}`, {
             headers,
         });
     },
 
-    addMember: (groupId: string, userId: string, identityKeys: IdentityKeys) => {
+    addMember: (groupId: string, userId: string) => {
         const body = { userId };
-        const headers = signRequest('POST', `/groups/${groupId}/members`, body, identityKeys);
+        const headers = vaultSignRequest('POST', `/groups/${groupId}/members`, body);
         return request<{ ok: boolean; members: GroupData['members'] }>(`/groups/${groupId}/members`, {
             method: 'POST',
             body: JSON.stringify(body),
@@ -331,8 +297,8 @@ export const groupsApi = {
         });
     },
 
-    removeMember: (groupId: string, userId: string, identityKeys: IdentityKeys) => {
-        const headers = signRequest('DELETE', `/groups/${groupId}/members/${userId}`, {}, identityKeys);
+    removeMember: (groupId: string, userId: string) => {
+        const headers = vaultSignRequest('DELETE', `/groups/${groupId}/members/${userId}`, {});
         return request<{ ok: boolean }>(`/groups/${groupId}/members/${userId}`, {
             method: 'DELETE',
             headers,
@@ -351,14 +317,14 @@ export interface ProfileData {
 }
 
 export const profileApi = {
-    get: (userId: string, identityKeys: IdentityKeys) => {
-        const headers = signRequest('GET', `/profile/${userId}`, {}, identityKeys);
+    get: (userId: string) => {
+        const headers = vaultSignRequest('GET', `/profile/${userId}`, {});
         return request<ProfileData>(`/profile/${userId}`, { headers });
     },
 
-    update: (userId: string, data: { displayName?: string | null; avatarFileId?: string | null }, identityKeys: IdentityKeys) => {
+    update: (userId: string, data: { displayName?: string | null; avatarFileId?: string | null }) => {
         const body = data as Record<string, unknown>;
-        const headers = signRequest('PUT', `/profile/${userId}`, body, identityKeys);
+        const headers = vaultSignRequest('PUT', `/profile/${userId}`, body);
         return request<ProfileData>(`/profile/${userId}`, {
             method: 'PUT',
             body: JSON.stringify(body),
@@ -370,9 +336,9 @@ export const profileApi = {
 // ==================== Invite API ====================
 
 export const inviteApi = {
-    createToken: (userId: string, identityKeys: IdentityKeys) => {
+    createToken: (userId: string) => {
         const body = { userId };
-        const headers = signRequest('POST', '/auth/invite-token', body, identityKeys);
+        const headers = vaultSignRequest('POST', '/auth/invite-token', body);
         return request<{ token: string; expiresAt: number }>('/auth/invite-token', {
             method: 'POST',
             body: JSON.stringify(body),
@@ -380,16 +346,16 @@ export const inviteApi = {
         });
     },
 
-    resolveToken: (token: string, identityKeys: IdentityKeys) => {
-        const headers = signRequest('GET', `/auth/resolve-invite/${token}`, {}, identityKeys);
+    resolveToken: (token: string) => {
+        const headers = vaultSignRequest('GET', `/auth/resolve-invite/${token}`, {});
         return request<UserBundle & { expiresAt: number }>(`/auth/resolve-invite/${token}`, {
             headers,
         });
     },
 
-    setDiscoverable: (userId: string, discoverable: boolean, identityKeys: IdentityKeys) => {
+    setDiscoverable: (userId: string, discoverable: boolean) => {
         const body = { userId, discoverable };
-        const headers = signRequest('PUT', '/auth/discoverable', body, identityKeys);
+        const headers = vaultSignRequest('PUT', '/auth/discoverable', body);
         return request<{ ok: boolean; discoverable: boolean }>('/auth/discoverable', {
             method: 'PUT',
             body: JSON.stringify(body),

@@ -18,6 +18,7 @@ import {
 import { useAuthStore, useChatsStore, useUIStore } from "@/stores";
 import { inviteApi, profileApi } from "@/lib/api";
 import { SectionHeading, ChipSelector, ToggleRow } from "./shared";
+import { vaultHasKeys, vaultGetMasterKey, vaultHasMasterKey } from "@/crypto/keyVault";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
@@ -34,8 +35,6 @@ type HiddenPinMode = "setup" | "change" | "reset";
 
 interface PrivacySectionProps {
   settings: Settings;
-  /** The derived master key — used to verify account PIN for hidden PIN reset. Never the raw PIN. */
-  masterKey: Uint8Array | null;
   onSettingsChange: (next: Settings) => void;
   onUpdate: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
   onSaveFlash: () => void;
@@ -43,7 +42,6 @@ interface PrivacySectionProps {
 
 export default function PrivacySection({
   settings,
-  masterKey,
   onSettingsChange,
   onUpdate,
   onSaveFlash,
@@ -62,10 +60,10 @@ export default function PrivacySection({
 
   // Fetch discoverable state from server on mount
   useEffect(() => {
-    const { userId, identityKeys } = useAuthStore.getState();
-    if (!userId || !identityKeys) return;
+    const { userId } = useAuthStore.getState();
+    if (!userId || !vaultHasKeys()) return;
     let cancelled = false;
-    void profileApi.get(userId, identityKeys).then((result) => {
+    void profileApi.get(userId).then((result) => {
       if (cancelled) return;
       if (result.data) {
         setDiscoverable(result.data.discoverable ?? true);
@@ -75,9 +73,9 @@ export default function PrivacySection({
   }, []);
 
   const handleToggleDiscoverable = useCallback(async (enabled: boolean) => {
-    const { userId, identityKeys } = useAuthStore.getState();
-    if (!userId || !identityKeys) return;
-    const result = await inviteApi.setDiscoverable(userId, enabled, identityKeys);
+    const { userId } = useAuthStore.getState();
+    if (!userId || !vaultHasKeys()) return;
+    const result = await inviteApi.setDiscoverable(userId, enabled);
     if (result.data) {
       setDiscoverable(result.data.discoverable);
       useAuthStore.getState().setDiscoverable(result.data.discoverable);
@@ -90,11 +88,11 @@ export default function PrivacySection({
   }, []);
 
   const handleGenerateInvite = useCallback(async () => {
-    const { userId, identityKeys } = useAuthStore.getState();
-    if (!userId || !identityKeys) return;
+    const { userId } = useAuthStore.getState();
+    if (!userId || !vaultHasKeys()) return;
     setInviteLoading(true);
     try {
-      const result = await inviteApi.createToken(userId, identityKeys);
+      const result = await inviteApi.createToken(userId);
       if (result.data) {
         setInviteToken(result.data.token);
         setInviteExpiresAt(result.data.expiresAt);
@@ -213,20 +211,21 @@ export default function PrivacySection({
       }
 
       if (hiddenPinMode === "reset") {
-        if (!masterKey) {
+        if (!vaultHasMasterKey()) {
           setHiddenPinError("Unlock session required");
           return;
         }
         // Verify the entered account PIN by deriving a key and comparing with session key
+        const currentMasterKey = vaultGetMasterKey();
         const derivedKey = await deriveMasterKeyFromPin(hiddenAccountPin);
         // Constant-time comparison
-        if (derivedKey.length !== masterKey.length) {
+        if (derivedKey.length !== currentMasterKey.length) {
           setHiddenPinError("Account PIN is incorrect");
           return;
         }
         let diff = 0;
         for (let i = 0; i < derivedKey.length; i++) {
-          diff |= derivedKey[i]! ^ masterKey[i]!;
+          diff |= derivedKey[i]! ^ currentMasterKey[i]!;
         }
         if (diff !== 0) {
           setHiddenPinError("Account PIN is incorrect");
@@ -241,11 +240,11 @@ export default function PrivacySection({
         hiddenChatPinHash,
       };
       onSettingsChange(next);
-      if (!masterKey) {
+      if (!vaultHasMasterKey()) {
         setHiddenPinError("Unlock session required to save hidden PIN");
         return;
       }
-      await saveSettings(next, masterKey);
+      await saveSettings(next, vaultGetMasterKey());
       setShowHiddenPinModal(false);
       resetHiddenPinForm();
       onSaveFlash();

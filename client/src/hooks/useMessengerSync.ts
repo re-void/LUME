@@ -51,6 +51,15 @@ import {
   type KeyPair,
 } from "@/crypto/keys";
 import { checkAndRotateSpk } from "@/crypto/spkRotation";
+import {
+  vaultGetMasterKey,
+  vaultGetSession,
+  vaultGetAllSessions,
+  vaultSubscribeSessionChanges,
+  vaultHasKeys,
+  vaultHasMasterKey,
+  vaultGetExchangeKeyPair,
+} from "@/crypto/keyVault";
 
 function reportCryptoIssue(message: string) {
   useUIStore.getState().setCryptoBanner({ level: "warning", message });
@@ -142,7 +151,6 @@ const PREKEY_REPLENISH_COUNT = 20;
 async function replenishPrekeys(
   masterKey: Uint8Array,
   userId: string,
-  identityKeys: import("@/crypto/keys").IdentityKeys,
 ): Promise<void> {
   const material = await loadPreKeyMaterial(masterKey);
   if (!material) return;
@@ -159,11 +167,7 @@ async function replenishPrekeys(
     publicKey: k.publicKey,
   }));
 
-  const { error } = await authApi.uploadPrekeys(
-    userId,
-    uploadPayload,
-    identityKeys,
-  );
+  const { error } = await authApi.uploadPrekeys(userId, uploadPayload);
   if (error) {
     if (process.env.NODE_ENV !== "production")
       console.warn(
@@ -193,9 +197,8 @@ async function ensureContact(params: {
 
   let newContact: Contact | null = null;
 
-  const identityKeys = useAuthStore.getState().identityKeys;
-  const { data } = identityKeys
-    ? await authApi.getUser(senderUsername, identityKeys)
+  const { data } = vaultHasKeys()
+    ? await authApi.getUser(senderUsername)
     : { data: null };
   if (data && data.id === senderId) {
     newContact = {
@@ -248,8 +251,7 @@ async function appendIncomingMessage(params: {
     masterKey,
   } = params;
 
-  const identityKeys = useAuthStore.getState().identityKeys;
-  if (!identityKeys) return false;
+  if (!vaultHasKeys()) return false;
 
   const isBlockedSender = !!useBlockedStore.getState().blockedIds[senderId];
 
@@ -279,8 +281,7 @@ async function appendIncomingMessage(params: {
     }
 
     // Read fresh session state inside the lock to prevent race conditions
-    const freshSessions = useSessionsStore.getState().sessions;
-    const existing = freshSessions[senderId];
+    const existing = vaultGetSession(senderId);
 
     let session = existing ? deserializeSession(existing) : null;
 
@@ -314,7 +315,7 @@ async function appendIncomingMessage(params: {
       }
 
       const sharedSecret = x3dhRespond(
-        identityKeys.exchange,
+        vaultGetExchangeKeyPair(),
         material.signedPreKey,
         opk,
         x3dh.senderIdentityKey,
@@ -432,7 +433,7 @@ async function appendIncomingMessage(params: {
 
     const decoded = decodeMessagePayload(
       encryptedPayload,
-      identityKeys.exchange.secretKey,
+      vaultGetExchangeKeyPair().secretKey,
       senderExchangeKey,
     );
     if (decoded?.content) {
@@ -500,8 +501,7 @@ export function useMessengerSync() {
   const router = useRouter();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const userId = useAuthStore((s) => s.userId);
-  const masterKey = useAuthStore((s) => s.masterKey);
-  const identityKeys = useAuthStore((s) => s.identityKeys);
+  const hasKeys = useAuthStore((s) => s.hasIdentityKeys);
   const clearAuth = useAuthStore((s) => s.clearAuth);
   const setContacts = useContactsStore((s) => s.setContacts);
   const setChats = useChatsStore((s) => s.setChats);
@@ -543,7 +543,7 @@ export function useMessengerSync() {
   }, [hydrated, isAuthenticated, router]);
 
   useEffect(() => {
-    if (!hydrated || !isAuthenticated || !userId || !identityKeys || !masterKey)
+    if (!hydrated || !isAuthenticated || !userId || !hasKeys)
       return undefined;
 
     let isMounted = true;
@@ -552,18 +552,20 @@ export function useMessengerSync() {
     let saveSessionsTimer: ReturnType<typeof setTimeout> | null = null;
 
     const loadLocalContacts = async () => {
-      const loaded = await loadContacts(masterKey);
+      const mk = vaultGetMasterKey();
+      const loaded = await loadContacts(mk);
       if (isMounted) setContacts(loaded);
     };
 
     const loadLocalChats = async () => {
-      const loaded = await loadChats(masterKey);
+      const mk = vaultGetMasterKey();
+      const loaded = await loadChats(mk);
       if (!isMounted) return;
 
       let nextChats = loaded;
       let nextShowHiddenChats = useUIStore.getState().showHiddenChats;
 
-      const settings = await loadSettings(masterKey).catch(() => null);
+      const settings = await loadSettings(mk).catch(() => null);
       if (settings) {
         const consistency = reconcileSettingsConsistency({
           settings,
@@ -589,7 +591,8 @@ export function useMessengerSync() {
     };
 
     const loadLocalSessions = async () => {
-      const loaded = await loadRatchetSessions(masterKey);
+      const mk = vaultGetMasterKey();
+      const loaded = await loadRatchetSessions(mk);
       if (isMounted) setSessions(loaded);
     };
 
@@ -599,8 +602,13 @@ export function useMessengerSync() {
       }
       saveChatsTimer = setTimeout(() => {
         saveChatsTimer = null;
-        const latestChats = useChatsStore.getState().chats;
-        saveChats(latestChats, masterKey).catch(console.error);
+        try {
+          const mk = vaultGetMasterKey();
+          const latestChats = useChatsStore.getState().chats;
+          saveChats(latestChats, mk).catch(console.error);
+        } catch {
+          /* vault cleared during cleanup — skip persist */
+        }
       }, 600);
     };
 
@@ -610,8 +618,13 @@ export function useMessengerSync() {
       }
       saveContactsTimer = setTimeout(() => {
         saveContactsTimer = null;
-        const latestContacts = useContactsStore.getState().contacts;
-        saveContacts(latestContacts, masterKey).catch(console.error);
+        try {
+          const mk = vaultGetMasterKey();
+          const latestContacts = useContactsStore.getState().contacts;
+          saveContacts(latestContacts, mk).catch(console.error);
+        } catch {
+          /* vault cleared during cleanup — skip persist */
+        }
       }, 600);
     };
 
@@ -621,8 +634,13 @@ export function useMessengerSync() {
       }
       saveSessionsTimer = setTimeout(() => {
         saveSessionsTimer = null;
-        const latestSessions = useSessionsStore.getState().sessions;
-        saveRatchetSessions(latestSessions, masterKey).catch(console.error);
+        try {
+          const mk = vaultGetMasterKey();
+          const latestSessions = vaultGetAllSessions();
+          saveRatchetSessions(latestSessions, mk).catch(console.error);
+        } catch {
+          /* vault cleared during cleanup — skip persist */
+        }
       }, 600);
     };
 
@@ -638,19 +656,14 @@ export function useMessengerSync() {
       }
     });
 
-    const unsubscribeSessions = useSessionsStore.subscribe((state, prev) => {
-      if (state.sessions !== prev.sessions) {
-        scheduleSessionsPersist();
-      }
-    });
+    const unsubscribeSessions = vaultSubscribeSessionChanges(() =>
+      scheduleSessionsPersist(),
+    );
 
     const syncPendingMessages = async () => {
-      if (!identityKeys || !userId) return;
+      if (!vaultHasKeys() || !userId) return;
 
-      const { data, error } = await messagesApi.getPending(
-        userId,
-        identityKeys,
-      );
+      const { data, error } = await messagesApi.getPending(userId);
       if (error || !data) return;
 
       const ackIds: string[] = [];
@@ -662,21 +675,22 @@ export function useMessengerSync() {
             messageId: pending.id,
             encryptedPayload: pending.encryptedPayload,
             fallbackTimestamp: pending.timestamp,
-            masterKey,
+            masterKey: vaultHasMasterKey() ? vaultGetMasterKey() : null,
           }),
         );
         if (processed) ackIds.push(pending.id);
       }
 
       if (ackIds.length > 0) {
-        await messagesApi.acknowledgeBatch(ackIds, identityKeys);
+        await messagesApi.acknowledgeBatch(ackIds);
       }
 
       // Replenish OPKs if running low after consuming during X3DH handshakes
-      if (masterKey) {
-        replenishPrekeys(masterKey, userId, identityKeys).catch(console.error);
+      if (vaultHasMasterKey()) {
+        const mk = vaultGetMasterKey();
+        replenishPrekeys(mk, userId).catch(console.error);
         // Check SPK age and rotate if needed (periodic check on sync)
-        checkAndRotateSpk(masterKey, userId, identityKeys).catch(console.error);
+        checkAndRotateSpk(mk, userId).catch(console.error);
       }
     };
 
@@ -684,7 +698,7 @@ export function useMessengerSync() {
       if (!isMounted) return;
 
       try {
-        const { data, error } = await authApi.getSession(userId, identityKeys);
+        const { data, error } = await authApi.getSession(userId);
         if (!isMounted) return;
 
         if (error || !data) {
@@ -720,7 +734,7 @@ export function useMessengerSync() {
       const localBlocked = loadBlockedIds();
       useBlockedStore.getState().setBlockedIds(localBlocked);
 
-      const { data } = await authApi.getBlockedUsers(identityKeys);
+      const { data } = await authApi.getBlockedUsers();
       if (!data || !Array.isArray(data.blockedIds)) return;
 
       const merged = [...new Set([...localBlocked, ...data.blockedIds])];
@@ -736,7 +750,7 @@ export function useMessengerSync() {
 
     wsClient.setTokenExpireHandler(async () => {
       try {
-        const { data } = await authApi.getSession(userId, identityKeys);
+        const { data } = await authApi.getSession(userId);
         if (data) {
           wsClient.connect(data.token).catch(console.error);
           syncPendingMessages().catch(console.error);
@@ -754,35 +768,37 @@ export function useMessengerSync() {
       unsubscribeBlocked();
 
       // Flush any pending debounced writes before unmounting
-      if (saveChatsTimer) {
-        clearTimeout(saveChatsTimer);
-        saveChatsTimer = null;
-        saveChats(useChatsStore.getState().chats, masterKey).catch(
-          console.error,
-        );
-      }
-      if (saveContactsTimer) {
-        clearTimeout(saveContactsTimer);
-        saveContactsTimer = null;
-        saveContacts(useContactsStore.getState().contacts, masterKey).catch(
-          console.error,
-        );
-      }
-      if (saveSessionsTimer) {
-        clearTimeout(saveSessionsTimer);
-        saveSessionsTimer = null;
-        saveRatchetSessions(
-          useSessionsStore.getState().sessions,
-          masterKey,
-        ).catch(console.error);
+      try {
+        const mk = vaultGetMasterKey();
+        if (saveChatsTimer) {
+          clearTimeout(saveChatsTimer);
+          saveChatsTimer = null;
+          saveChats(useChatsStore.getState().chats, mk).catch(console.error);
+        }
+        if (saveContactsTimer) {
+          clearTimeout(saveContactsTimer);
+          saveContactsTimer = null;
+          saveContacts(useContactsStore.getState().contacts, mk).catch(
+            console.error,
+          );
+        }
+        if (saveSessionsTimer) {
+          clearTimeout(saveSessionsTimer);
+          saveSessionsTimer = null;
+          saveRatchetSessions(vaultGetAllSessions(), mk).catch(console.error);
+        }
+      } catch {
+        // Vault already cleared (logout) — cancel timers, skip persist
+        if (saveChatsTimer) clearTimeout(saveChatsTimer);
+        if (saveContactsTimer) clearTimeout(saveContactsTimer);
+        if (saveSessionsTimer) clearTimeout(saveSessionsTimer);
       }
     };
   }, [
     hydrated,
     isAuthenticated,
     userId,
-    masterKey,
-    identityKeys,
+    hasKeys,
     setContacts,
     setChats,
     setSessions,
@@ -791,7 +807,7 @@ export function useMessengerSync() {
   ]);
 
   useEffect(() => {
-    if (!hydrated || !isAuthenticated || !identityKeys) return undefined;
+    if (!hydrated || !isAuthenticated || !hasKeys) return undefined;
 
     const handleNewMessage = (rawData: unknown) => {
       const data = rawData as {
@@ -810,12 +826,12 @@ export function useMessengerSync() {
             messageId: data.messageId,
             encryptedPayload: data.encryptedPayload,
             fallbackTimestamp: data.timestamp,
-            masterKey: useAuthStore.getState().masterKey,
+            masterKey: vaultHasMasterKey() ? vaultGetMasterKey() : null,
           }),
         );
 
         if (processed) {
-          await messagesApi.acknowledge(data.messageId, identityKeys);
+          await messagesApi.acknowledge(data.messageId);
 
           // If the chat is currently active, send a read receipt immediately
           const activeChat = useChatsStore.getState().activeChatId;
@@ -836,14 +852,11 @@ export function useMessengerSync() {
           }
 
           // Replenish OPKs after consuming during X3DH handshakes
-          const currentMasterKey = useAuthStore.getState().masterKey;
           const currentUserId = useAuthStore.getState().userId;
-          if (currentMasterKey && currentUserId) {
-            replenishPrekeys(
-              currentMasterKey,
-              currentUserId,
-              identityKeys,
-            ).catch(console.error);
+          if (vaultHasMasterKey() && currentUserId) {
+            replenishPrekeys(vaultGetMasterKey(), currentUserId).catch(
+              console.error,
+            );
           }
         }
       })();
@@ -853,7 +866,7 @@ export function useMessengerSync() {
     return () => {
       wsClient.off("new_message", handleNewMessage);
     };
-  }, [hydrated, isAuthenticated, identityKeys]);
+  }, [hydrated, isAuthenticated, hasKeys]);
 
   // Handle incoming read receipts — update message status for our sent messages
   useEffect(() => {

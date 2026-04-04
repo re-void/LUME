@@ -66,53 +66,28 @@ describe('useAuthStore', () => {
     expect(state.isAuthenticated).toBe(false);
     expect(state.userId).toBeNull();
     expect(state.username).toBeNull();
-    expect(state.identityKeys).toBeNull();
-    expect(state.masterKey).toBeNull();
+    expect(state.hasIdentityKeys).toBe(false);
   });
 
-  it('setAuth sets all fields', () => {
-    const keys = generateIdentityKeys();
-    const masterKey = new Uint8Array(32).fill(1);
-
-    useAuthStore.getState().setAuth('user1', 'alice', keys, masterKey);
+  it('setAuth sets public fields', () => {
+    useAuthStore.getState().setAuth('user1', 'alice');
 
     const state = useAuthStore.getState();
     expect(state.isAuthenticated).toBe(true);
     expect(state.userId).toBe('user1');
     expect(state.username).toBe('alice');
-    expect(state.identityKeys).toEqual(keys);
-    expect(state.masterKey).toBe(masterKey);
+    expect(state.hasIdentityKeys).toBe(true);
   });
 
-  it('clearAuth resets everything and zeroes key material', () => {
-    const masterKey = new Uint8Array(32).fill(99);
-    const keys = generateIdentityKeys();
-
-    useAuthStore.getState().setAuth('user1', 'alice', keys, masterKey);
+  it('clearAuth resets everything', () => {
+    useAuthStore.getState().setAuth('user1', 'alice');
     useAuthStore.getState().clearAuth();
 
     const state = useAuthStore.getState();
     expect(state.isAuthenticated).toBe(false);
     expect(state.userId).toBeNull();
     expect(state.username).toBeNull();
-    expect(state.identityKeys).toBeNull();
-    expect(state.masterKey).toBeNull();
-
-    // Master key should have been zeroed (filled with 0)
-    expect(masterKey.every((b) => b === 0)).toBe(true);
-  });
-
-  it('setMasterKey updates only the masterKey', () => {
-    const keys = generateIdentityKeys();
-    const mk1 = new Uint8Array(32).fill(1);
-    const mk2 = new Uint8Array(32).fill(2);
-
-    useAuthStore.getState().setAuth('user1', 'alice', keys, mk1);
-    useAuthStore.getState().setMasterKey(mk2);
-
-    const state = useAuthStore.getState();
-    expect(state.masterKey).toBe(mk2);
-    expect(state.userId).toBe('user1'); // unchanged
+    expect(state.hasIdentityKeys).toBe(false);
   });
 });
 
@@ -512,7 +487,7 @@ describe('useSessionsStore', () => {
     useSessionsStore.getState().setSessions({});
   });
 
-  it('upsertSession adds a session', () => {
+  it('upsertSession adds a contact ID to sessionContactIds', () => {
     const session = {
       dhSendingKeyPair: generateExchangeKeyPair(),
       dhReceivingPublicKey: null,
@@ -526,10 +501,10 @@ describe('useSessionsStore', () => {
     };
 
     useSessionsStore.getState().upsertSession('contact1', session);
-    expect(useSessionsStore.getState().sessions['contact1']).toEqual(session);
+    expect(useSessionsStore.getState().sessionContactIds).toContain('contact1');
   });
 
-  it('deleteSession removes a session', () => {
+  it('deleteSession removes contact ID from sessionContactIds', () => {
     const session = {
       dhSendingKeyPair: generateExchangeKeyPair(),
       dhReceivingPublicKey: null,
@@ -544,12 +519,12 @@ describe('useSessionsStore', () => {
 
     useSessionsStore.getState().upsertSession('contact1', session);
     useSessionsStore.getState().deleteSession('contact1');
-    expect(useSessionsStore.getState().sessions['contact1']).toBeUndefined();
+    expect(useSessionsStore.getState().sessionContactIds).not.toContain('contact1');
   });
 
   it('deleteSession on non-existent id is a no-op', () => {
-    const before = useSessionsStore.getState().sessions;
+    const before = useSessionsStore.getState().sessionContactIds;
     useSessionsStore.getState().deleteSession('nonexistent');
-    expect(useSessionsStore.getState().sessions).toBe(before);
+    expect(useSessionsStore.getState().sessionContactIds).toEqual(before);
   });
 });

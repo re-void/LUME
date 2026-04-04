@@ -5,6 +5,7 @@ import { groupsApi } from "@/lib/api";
 import type { GroupData } from "@/lib/api";
 import { useAuthStore, useGroupsStore } from "@/stores";
 import { Button } from "@/components/ui";
+import { vaultHasKeys } from "@/crypto/keyVault";
 import { Avatar } from "@/components/ui/Avatar";
 import AddMemberModal from "@/components/modals/AddMemberModal";
 
@@ -14,7 +15,6 @@ interface GroupViewProps {
 
 export default function GroupView({ group }: GroupViewProps) {
   const userId = useAuthStore((s) => s.userId);
-  const identityKeys = useAuthStore((s) => s.identityKeys);
   const updateGroup = useGroupsStore((s) => s.updateGroup);
   const removeGroup = useGroupsStore((s) => s.removeGroup);
   const setActiveGroup = useGroupsStore((s) => s.setActiveGroup);
@@ -28,12 +28,12 @@ export default function GroupView({ group }: GroupViewProps) {
   const isAdmin = currentMember?.role === "admin";
 
   const handleRemoveMember = async (memberUserId: string) => {
-    if (!identityKeys) return;
+    if (!vaultHasKeys()) return;
 
     setRemovingId(memberUserId);
     setError("");
 
-    const result = await groupsApi.removeMember(group.id, memberUserId, identityKeys);
+    const result = await groupsApi.removeMember(group.id, memberUserId);
 
     if (result.error) {
       setError(result.error);
@@ -48,12 +48,12 @@ export default function GroupView({ group }: GroupViewProps) {
   };
 
   const handleLeaveGroup = async () => {
-    if (!identityKeys || !userId) return;
+    if (!vaultHasKeys() || !userId) return;
 
     setLeavingGroup(true);
     setError("");
 
-    const result = await groupsApi.removeMember(group.id, userId, identityKeys);
+    const result = await groupsApi.removeMember(group.id, userId);
 
     if (result.error) {
       setError(result.error);

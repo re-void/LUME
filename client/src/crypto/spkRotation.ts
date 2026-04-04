@@ -8,7 +8,7 @@
  */
 
 import { generateSignedPreKey } from "./keys";
-import type { IdentityKeys } from "./keys";
+import { vaultGetSigningKeyPair } from "./keyVault";
 import {
   loadPreKeyMaterial,
   savePreKeyMaterial,
@@ -36,7 +36,6 @@ interface SpkRotationResult {
 export async function checkAndRotateSpk(
   masterKey: Uint8Array,
   userId: string,
-  identityKeys: IdentityKeys,
 ): Promise<SpkRotationResult> {
   const material = await loadPreKeyMaterial(masterKey);
   if (!material) {
@@ -72,7 +71,7 @@ export async function checkAndRotateSpk(
   material.previousSpkRetiredAt = now;
 
   // 2. Generate new SPK
-  const { signedPreKey, signature } = generateSignedPreKey(identityKeys.signing);
+  const { signedPreKey, signature } = generateSignedPreKey(vaultGetSigningKeyPair());
   material.signedPreKey = signedPreKey;
   material.spkCreatedAt = now;
   material.updatedAt = now;
@@ -85,7 +84,6 @@ export async function checkAndRotateSpk(
     userId,
     signedPreKey.publicKey,
     signature,
-    identityKeys,
   );
 
   if (error) {

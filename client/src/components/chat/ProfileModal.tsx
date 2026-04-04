@@ -8,15 +8,14 @@ import {
   type Chat,
 } from "@/stores";
 import type { Contact } from "@/crypto/storage";
-import type { IdentityKeys } from "@/crypto/keys";
 import { authApi } from "@/lib/api";
+import { vaultHasKeys } from "@/crypto/keyVault";
 
 interface ProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
   contact: Contact;
   chat: Chat;
-  identityKeys: IdentityKeys | null;
   safetyNumber: string | null;
   isContactBlocked: boolean;
   onDeleteContact: () => void;
@@ -29,7 +28,6 @@ export default function ProfileModal({
   onClose,
   contact,
   chat,
-  identityKeys,
   safetyNumber,
   isContactBlocked,
   onDeleteContact,
@@ -57,7 +55,7 @@ export default function ProfileModal({
         </h2>
         <p className="text-[12px] text-[var(--text-muted)] mb-6">LUME User</p>
 
-        {identityKeys ? (
+        {vaultHasKeys() ? (
           <div className="w-full bg-[var(--surface-alt)] rounded-[var(--radius-md)] p-5 border border-[var(--border)] text-center">
             <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-muted)]">
               Safety number
@@ -116,14 +114,14 @@ export default function ProfileModal({
               : 'border-orange-500/30 text-orange-400 hover:bg-orange-500/10'
           }`}
           onClick={async () => {
-            if (!contactId || !identityKeys) return;
+            if (!contactId || !vaultHasKeys()) return;
             setBlockLoading(true);
             try {
               if (isContactBlocked) {
-                await authApi.unblockUser(contactId, identityKeys);
+                await authApi.unblockUser(contactId);
                 useBlockedStore.getState().removeBlocked(contactId);
               } else {
-                await authApi.blockUser(contactId, identityKeys);
+                await authApi.blockUser(contactId);
                 useBlockedStore.getState().addBlocked(contactId);
               }
             } catch {

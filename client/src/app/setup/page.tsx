@@ -17,6 +17,7 @@ import {
 import { generatePreKeyBundle } from "@/crypto/keys";
 import { authApi } from "@/lib/api";
 import { useAuthStore } from "@/stores";
+import { vaultSetAuth } from "@/crypto/keyVault";
 import type { IdentityKeys } from "@/crypto/keys";
 
 type Step = "username" | "pin" | "generate" | "save-seed" | "complete";
@@ -164,7 +165,8 @@ export default function SetupPage() {
         username,
         userId: data!.id,
       });
-      setAuth(data!.id, username, generatedIdentity, masterKey);
+      vaultSetAuth(generatedIdentity, masterKey);
+      setAuth(data!.id, username);
       setStep("save-seed");
     } catch (registrationError) {
       if (process.env.NODE_ENV !== "production")

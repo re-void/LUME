@@ -5,7 +5,8 @@ import { Modal, Button } from "@/components/ui";
 import { Avatar } from "@/components/ui/Avatar";
 import { groupsApi } from "@/lib/api";
 import type { GroupData } from "@/lib/api";
-import { useAuthStore, useContactsStore, useGroupsStore } from "@/stores";
+import { useContactsStore, useGroupsStore } from "@/stores";
+import { vaultHasKeys } from "@/crypto/keyVault";
 
 interface AddMemberModalProps {
   isOpen: boolean;
@@ -18,7 +19,6 @@ export default function AddMemberModal({
   onClose,
   group,
 }: AddMemberModalProps) {
-  const identityKeys = useAuthStore((s) => s.identityKeys);
   const contacts = useContactsStore((s) => s.contacts);
   const updateGroup = useGroupsStore((s) => s.updateGroup);
 
@@ -54,7 +54,7 @@ export default function AddMemberModal({
       setError("Select a contact to add");
       return;
     }
-    if (!identityKeys) {
+    if (!vaultHasKeys()) {
       setError("Authentication required");
       return;
     }
@@ -62,7 +62,7 @@ export default function AddMemberModal({
     setError("");
     setLoading(true);
 
-    const result = await groupsApi.addMember(group.id, selectedId, identityKeys);
+    const result = await groupsApi.addMember(group.id, selectedId);
 
     if (result.error) {
       setError(result.error);

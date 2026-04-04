@@ -15,6 +15,7 @@ import { useAuthStore } from "@/stores";
 import { loadSettings, saveSettings, type Settings } from "@/crypto/storage";
 import { applyTheme } from "@/lib/theme";
 import { isSoundEnabled } from "@/lib/sounds";
+import { vaultGetMasterKey, vaultHasMasterKey } from "@/crypto/keyVault";
 
 import ProfileSection from "./components/ProfileSection";
 import AppearanceSection from "./components/AppearanceSection";
@@ -27,7 +28,6 @@ export default function SettingsPage() {
   const router = useRouter();
   const { hydrated } = useMessengerSync();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const masterKey = useAuthStore((s) => s.masterKey);
   const { isPanicMode, showPanicConfirm, setShowPanicConfirm, executePanic } =
     usePanic();
 
@@ -44,11 +44,12 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (hydrated && isAuthenticated) {
-      loadSettings(masterKey ?? undefined).then(setSettingsState);
+      const mk = vaultHasMasterKey() ? vaultGetMasterKey() : undefined;
+      loadSettings(mk).then(setSettingsState);
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setSoundOn(isSoundEnabled());
     }
-  }, [hydrated, isAuthenticated, masterKey]);
+  }, [hydrated, isAuthenticated]);
 
   const triggerSaveFlash = useCallback(() => {
     setSaveFlash(true);
@@ -63,10 +64,11 @@ export default function SettingsPage() {
       if (key === "theme") {
         applyTheme(value as Settings["theme"], true);
       }
-      await saveSettings(next, masterKey ?? undefined);
+      const mk = vaultHasMasterKey() ? vaultGetMasterKey() : undefined;
+      await saveSettings(next, mk);
       triggerSaveFlash();
     },
-    [settings, masterKey, triggerSaveFlash],
+    [settings, triggerSaveFlash],
   );
 
   if (!hydrated || !settings) {
@@ -155,7 +157,6 @@ export default function SettingsPage() {
 
         <PrivacySection
           settings={settings}
-          masterKey={masterKey}
           onSettingsChange={setSettingsState}
           onUpdate={updateSetting}
           onSaveFlash={triggerSaveFlash}
