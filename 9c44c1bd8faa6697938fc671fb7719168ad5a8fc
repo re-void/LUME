@@ -1,0 +1,85 @@
+client/src/crypto/keyVault.ts
+  4dbe9217ef12d921 1-272
+client/src/components/messenger/LeftRail.tsx
+  4dbe9217ef12d921 10,63,71,98
+client/src/components/modals/CreateGroupModal.tsx
+  4dbe9217ef12d921 8-9,69
+client/src/__tests__/crypto.keyVault.test.ts
+  4dbe9217ef12d921 1-376
+client/src/hooks/useContactActions.ts
+  4dbe9217ef12d921 12,54,90-94
+client/src/__tests__/hooks.useMessengerSync.test.ts
+  4dbe9217ef12d921 157,161
+client/src/hooks/useContactAvatars.ts
+  4dbe9217ef12d921 8,38,42,81
+client/src/app/settings/components/DangerZoneSection.tsx
+  4dbe9217ef12d921 40
+client/src/components/messenger/ChatListPanel.tsx
+  4dbe9217ef12d921 9,236-237,246
+client/src/components/modals/AddMemberModal.tsx
+  4dbe9217ef12d921 8-9,57,65
+client/src/__tests__/lib.api.test.ts
+  4dbe9217ef12d921 4,9,12-18,21-22,27,43,50,154,190,193,195,210,223,238,254,266,277,288,297,306,314,327,339,351,360,366
+client/src/hooks/useMessengerSync.ts
+  4dbe9217ef12d921 54-62,200,254,284,318,436,504,546,555-556,561-562,568,594-595,605-611,621-627,637-643,659-660,664,678,689-691,693,771-772,776,781,788-794,801,810,829,856-858,869
+client/src/app/chat/[id]/page.tsx
+  4dbe9217ef12d921 65-70,94,158,160,162-163,171,200,245,248,346,441,476,488
+client/src/app/chats/page.tsx
+  4dbe9217ef12d921 56,92,99
+client/src/components/chat/ProfileModal.tsx
+  4dbe9217ef12d921 12,58,117,121,124
+client/src/app/invite/[token]/page.tsx
+  4dbe9217ef12d921 20,43,51,94,142-146,165
+client/src/app/setup/page.tsx
+  4dbe9217ef12d921 20,168-169
+client/src/app/recover/page.tsx
+  4dbe9217ef12d921 18,74-80,86,92,152
+client/src/stores/index.ts
+  4dbe9217ef12d921 8,17-18,28-29,34,38,41,46,90-91,99,101-104,106-112,114-115,117-121,123-125
+client/src/crypto/spkRotation.ts
+  4dbe9217ef12d921 11,74
+client/src/components/chat/GroupView.tsx
+  4dbe9217ef12d921 8,31,51,56
+client/src/components/modals/BackupModal.tsx
+  4dbe9217ef12d921 7,53,60
+client/src/app/settings/components/ProfileSection.tsx
+  4dbe9217ef12d921 13,22,39,71,75,128,131,148
+client/src/lib/api.ts
+  4dbe9217ef12d921 5,95-96,102,104,112,114,128,136-137,144,146,154,156,164,166,174-175,199-200,208-209,215-216,223,225,237,239,247-248,266,268,276-277,283-284,290,292,300-301,320-321,325,327,339,341,349-350,356,358
+client/src/__tests__/hooks.useContactActions.test.ts
+  4dbe9217ef12d921 21-22,53-59,85-86,255-256,312
+client/src/__tests__/crypto.spkRotation.test.ts
+  4dbe9217ef12d921 25,53,57-58,69,85,104,116,133,141,155
+client/src/app/settings/components/SecuritySection.tsx
+  4dbe9217ef12d921 10,56
+client/src/components/chat/MessageBubble.tsx
+  4dbe9217ef12d921 8,95,99
+client/src/app/unlock/page.tsx
+  4dbe9217ef12d921 20,94-96,110,135,143,173,256
+client/src/app/settings/components/PrivacySection.tsx
+  4dbe9217ef12d921 21,64,77,92,214,219,222,228,243,247
+client/src/__tests__/stores.test.ts
+  4dbe9217ef12d921 69,72-73,79,82,90,490,504,507,522,526,528
+client/src/app/settings/page.tsx
+  4dbe9217ef12d921 18,47-48,67-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "9c44c1bd8faa6697938fc671fb7719168ad5a8fc",
+  "prompts": {
+    "4dbe9217ef12d921": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b8946113-3e96-417c-b96c-88b89039df5e",
+        "model": "<synthetic>"
+      },
+      "human_author": "rekonov",
+      "messages": [],
+      "total_additions": 2453,
+      "total_deletions": 676,
+      "accepted_lines": 2193,
+      "overriden_lines": 0
+    }
+  }
+}
