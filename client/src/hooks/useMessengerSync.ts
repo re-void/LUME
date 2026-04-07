@@ -210,16 +210,9 @@ async function ensureContact(params: {
       addedAt: Date.now(),
     };
   } else {
-    const senderExchangeKey = getSenderExchangeKeyFromPayload(encryptedPayload);
-    if (!senderExchangeKey) return null;
-
-    newContact = {
-      id: senderId,
-      username: senderUsername,
-      publicKey: "",
-      exchangeKey: senderExchangeKey,
-      addedAt: Date.now(),
-    };
+    // Server lookup failed — refuse to create an unverified contact from
+    // untrusted payload data (exchange key without identity verification).
+    return null;
   }
 
   const currentContacts = useContactsStore.getState().contacts;

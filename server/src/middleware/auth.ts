@@ -5,14 +5,14 @@ import { createHash } from 'crypto'
 import database from '../db/database'
 
 function getCanonicalApiPath(req: Request): string {
-  const withoutQuery = req.originalUrl.split('?')[0] ?? req.originalUrl
-  if (withoutQuery.startsWith('/api/')) {
-    return withoutQuery.slice('/api'.length)
-  }
-  if (withoutQuery === '/api') {
-    return '/'
-  }
-  return withoutQuery
+  const url = req.originalUrl
+  const [pathPart, queryPart] = url.split('?') as [string, string | undefined]
+  const basePath = pathPart.startsWith('/api/')
+    ? pathPart.slice('/api'.length)
+    : pathPart === '/api'
+      ? '/'
+      : pathPart
+  return queryPart ? `${basePath}?${queryPart}` : basePath
 }
 
 export const requireSignature = (req: Request, res: Response, next: NextFunction) => {

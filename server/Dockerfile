@@ -25,8 +25,8 @@ RUN npm ci --omit=dev --legacy-peer-deps
 
 COPY --from=build /app/dist ./dist
 
-# Ensure writable data dir for SQLite when running as non-root.
-RUN mkdir -p /app/data && chown -R node:node /app
+# Only /app/data needs to be writable; dist/ stays root-owned (read-only).
+RUN mkdir -p /app/data && chown node:node /app/data
 USER node
 
 EXPOSE 3001

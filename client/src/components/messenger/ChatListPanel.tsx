@@ -1,6 +1,6 @@
 'use client';
 
-import React, { memo, useCallback, useEffect, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Chat } from '@/stores';
 import { useBlockedStore, useChatsStore, useGroupsStore, useUIStore } from '@/stores';
@@ -342,29 +342,44 @@ export default function ChatListPanel({
     setChatHidden(chatId, !target.isHidden);
   }, [chats, hiddenChatsEnabled, setChatHidden]);
 
-  const modeScopedChats = chats
-    .filter((chat) => {
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => {
+    const trimmed = searchQuery.trim().toLowerCase();
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setDebouncedQuery(trimmed), 250);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [searchQuery]);
+
+  const modeScopedChats = useMemo(() =>
+    chats.filter((chat) => {
       if (!hiddenChatsEnabled) return true;
       return showHiddenChats ? chat.isHidden : !chat.isHidden;
-    });
+    }),
+    [chats, hiddenChatsEnabled, showHiddenChats],
+  );
 
-  const query = searchQuery.trim().toLowerCase();
+  const query = debouncedQuery;
 
-  const filtered = modeScopedChats
-    .filter((chat) => {
+  const filtered = useMemo(() =>
+    modeScopedChats.filter((chat) => {
       const contact = contacts.find((c) => c.id === chat.contactId);
       if (!contact) return false;
       if (!query) return true;
-      // Match contact username
       if (contact.username.toLowerCase().includes(query)) return true;
-      // Match message content
       return chat.messages.some((m) => m.content.toLowerCase().includes(query));
-    });
+    }),
+    [modeScopedChats, contacts, query],
+  );
 
-  const filteredGroups = groups.filter((g) => {
-    if (!query) return true;
-    return g.name.toLowerCase().includes(query);
-  });
+  const filteredGroups = useMemo(() =>
+    groups.filter((g) => {
+      if (!query) return true;
+      return g.name.toLowerCase().includes(query);
+    }),
+    [groups, query],
+  );
 
   const handleSelectGroup = (groupId: string) => {
     setActiveGroup(groupId);

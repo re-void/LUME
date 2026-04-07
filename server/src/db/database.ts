@@ -591,15 +591,15 @@ export const database = {
 
   getUsersByIds(userIds: string[]): User[] {
     if (userIds.length === 0) return []
+    const stmt = db.prepare('SELECT * FROM users WHERE id = ?')
     const results: User[] = []
-    for (let i = 0; i < userIds.length; i += 500) {
-      const chunk = userIds.slice(i, i + 500)
-      const placeholders = chunk.map(() => '?').join(', ')
-      const rows = db
-        .prepare(`SELECT * FROM users WHERE id IN (${placeholders})`)
-        .all(...chunk) as User[]
-      results.push(...rows)
-    }
+    const run = db.transaction((ids: string[]) => {
+      for (const id of ids) {
+        const row = stmt.get(id) as User | undefined
+        if (row) results.push(row)
+      }
+    })
+    run(userIds)
     return results
   },
 
@@ -618,16 +618,14 @@ export const database = {
    */
   batchDeleteMessages(messageIds: string[], recipientId: string): number {
     if (messageIds.length === 0) return 0
+    const stmt = db.prepare('DELETE FROM pending_messages WHERE id = ? AND recipient_id = ?')
     let totalDeleted = 0
-    for (let i = 0; i < messageIds.length; i += 500) {
-      const chunk = messageIds.slice(i, i + 500)
-      const placeholders = chunk.map(() => '?').join(',')
-      const stmt = db.prepare(`
-        DELETE FROM pending_messages
-        WHERE id IN (${placeholders}) AND recipient_id = ?
-      `)
-      totalDeleted += stmt.run(...chunk, recipientId).changes
-    }
+    const run = db.transaction((ids: string[]) => {
+      for (const id of ids) {
+        totalDeleted += stmt.run(id, recipientId).changes
+      }
+    })
+    run(messageIds)
     return totalDeleted
   },
 

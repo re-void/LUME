@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import { headers } from "next/headers";
 import "./globals.css";
 import StatusBanner from "@/components/StatusBanner";
@@ -46,27 +47,7 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased min-h-screen">
-        <script
-          nonce={nonce}
-          suppressHydrationWarning
-          // Set theme before React hydration to avoid a flash.
-          dangerouslySetInnerHTML={{
-            __html: `
-(() => {
-  try {
-    const key = 'lume-theme';
-    const stored = localStorage.getItem(key);
-    const theme =
-      stored === 'light' || stored === 'dark'
-        ? stored
-        : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-    document.documentElement.dataset.theme = theme;
-    document.documentElement.style.colorScheme = theme;
-  } catch {}
-})();
-            `.trim(),
-          }}
-        />
+        <Script nonce={nonce} src="/theme-init.js" strategy="beforeInteractive" />
         <div className="min-h-screen flex flex-col">
           <ServiceWorkerRegistration />
           <OnlineStatus />
