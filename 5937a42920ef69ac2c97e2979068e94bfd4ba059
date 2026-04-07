@@ -1,0 +1,35 @@
+client/public/theme-init.js
+  596101e167a3a48c 1-12
+server/Dockerfile
+  596101e167a3a48c 28-29
+client/src/components/messenger/ChatListPanel.tsx
+  596101e167a3a48c 3,345-356,359-361,363,365-366,372-374,376-382
+server/src/middleware/auth.ts
+  596101e167a3a48c 8-11
+client/src/app/layout.tsx
+  596101e167a3a48c 49
+client/src/hooks/useMessengerSync.ts
+  596101e167a3a48c 213-215
+server/src/db/database.ts
+  596101e167a3a48c 594,596-602,621,623-628
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "5937a42920ef69ac2c97e2979068e94bfd4ba059",
+  "prompts": {
+    "596101e167a3a48c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d3f233c6-ff48-4d2a-9ae8-46694ca7ff4a",
+        "model": "<synthetic>"
+      },
+      "human_author": "rekonov",
+      "messages": [],
+      "total_additions": 68,
+      "total_deletions": 74,
+      "accepted_lines": 66,
+      "overriden_lines": 0
+    }
+  }
+}
