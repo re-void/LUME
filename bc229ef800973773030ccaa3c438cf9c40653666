@@ -1,0 +1,27 @@
+client/package.json
+  596101e167a3a48c 51-53
+server/package.json
+  596101e167a3a48c 58-60
+client/src/app/layout.tsx
+  596101e167a3a48c 2,50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "bc229ef800973773030ccaa3c438cf9c40653666",
+  "prompts": {
+    "596101e167a3a48c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d3f233c6-ff48-4d2a-9ae8-46694ca7ff4a",
+        "model": "<synthetic>"
+      },
+      "human_author": "rekonov",
+      "messages": [],
+      "total_additions": 8,
+      "total_deletions": 1,
+      "accepted_lines": 8,
+      "overriden_lines": 0
+    }
+  }
+}
