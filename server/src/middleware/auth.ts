@@ -7,7 +7,11 @@ import database from '../db/database'
 function getCanonicalApiPath(req: Request): string {
   const url = req.originalUrl
   const [pathPart, queryPart] = url.split('?') as [string, string | undefined]
-  const basePath = pathPart.startsWith('/api/') ? pathPart.slice('/api'.length) : pathPart === '/api' ? '/' : pathPart
+  const basePath = pathPart.startsWith('/api/')
+    ? pathPart.slice('/api'.length)
+    : pathPart === '/api'
+      ? '/'
+      : pathPart
   return queryPart ? `${basePath}?${queryPart}` : basePath
 }
 

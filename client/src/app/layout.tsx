@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import { headers } from "next/headers";
 import "./globals.css";
 import StatusBanner from "@/components/StatusBanner";
@@ -46,7 +47,7 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased min-h-screen">
-        <script nonce={nonce} src="/theme-init.js" suppressHydrationWarning />
+        <Script nonce={nonce} src="/theme-init.js" strategy="beforeInteractive" />
         <div className="min-h-screen flex flex-col">
           <ServiceWorkerRegistration />
           <OnlineStatus />
