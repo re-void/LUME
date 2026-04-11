@@ -1,0 +1,23 @@
+docs/PROTOCOL.md
+  596101e167a3a48c 46,91-106,685-1185,1267-1268,1294-1295
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.5",
+  "base_commit_sha": "1252d0bc7c5945ef01a7e7577496641f0ae53cf5",
+  "prompts": {
+    "596101e167a3a48c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d3f233c6-ff48-4d2a-9ae8-46694ca7ff4a",
+        "model": "<synthetic>"
+      },
+      "human_author": "rekonov",
+      "messages": [],
+      "total_additions": 522,
+      "total_deletions": 1,
+      "accepted_lines": 522,
+      "overriden_lines": 0
+    }
+  }
+}
