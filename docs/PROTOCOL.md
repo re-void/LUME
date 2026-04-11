@@ -43,7 +43,7 @@ The signed message is a dot-delimited string:
 ```
 
 - `METHOD` is uppercase (e.g., `GET`, `POST`).
-- `path` is the canonical path without the `/api` prefix (e.g., `/auth/register`).
+- `path` is the canonical path without the `/api` prefix, including query string if present (e.g., `/auth/register` or `/messages/pending/abc?limit=50`).
 - `body` is the raw JSON body string. For empty bodies, both `""` and `"{}"` are accepted.
 
 The message is UTF-8 encoded and signed with `nacl.sign.detached` using the sender's Ed25519 secret key.
@@ -88,6 +88,22 @@ The server computes a SHA-256 hash of `identityKey|timestamp|signature|nonce|met
 | `GET` | `/api/messages/pending/:userId` | Yes | None (inherits global) |
 | `DELETE` | `/api/messages/:messageId` | Yes | None (inherits global) |
 | `POST` | `/api/messages/acknowledge` | Yes | None (inherits global) |
+| `POST` | `/api/auth/invite-token` | Yes | 10 / 1 min per user |
+| `GET` | `/api/auth/resolve-invite/:token` | Yes | 10 / 1 min per user |
+| `PUT` | `/api/auth/discoverable` | Yes | 20 / 1 min per user |
+| `GET` | `/api/profile/:userId` | Yes | 30 / 1 min per user |
+| `PUT` | `/api/profile/:userId` | Yes | 30 / 1 min per user |
+| `POST` | `/api/files/upload` | Yes | 30 / 1 min per user |
+| `GET` | `/api/files/:fileId` | Yes | 120 / 1 min per user |
+| `GET` | `/api/files/:fileId/raw` | Yes | 120 / 1 min per user |
+| `GET` | `/api/push/vapid-key` | No | None |
+| `POST` | `/api/push/subscribe` | Yes | 20 / 1 min per user |
+| `POST` | `/api/push/unsubscribe` | Yes | 20 / 1 min per user |
+| `POST` | `/api/groups/create` | Yes | 30 / 1 min per user |
+| `GET` | `/api/groups` | Yes | None |
+| `GET` | `/api/groups/:groupId` | Yes | None |
+| `POST` | `/api/groups/:groupId/members` | Yes | 30 / 1 min per user |
+| `DELETE` | `/api/groups/:groupId/members/:userId` | Yes | None |
 | `GET` | `/api/health` | No | None |
 | `GET` | `/api/metrics` | No | None (disabled in production) |
 
@@ -666,6 +682,507 @@ Server metrics. **Disabled in production** (returns `404`).
 
 ---
 
+### POST /api/auth/invite-token
+
+Create an invite token that lets another user discover you.
+
+**Auth required:** Yes
+
+**Rate limit:** 10 requests / 1 minute per user. Max 5 active tokens per user.
+
+**Request body:**
+
+```typescript
+{
+  userId: string
+}
+```
+
+**Success response:** `201 Created`
+
+```typescript
+{
+  token: string       // Base64url-encoded token, expires in 7 days
+  expiresAt: number   // Unix timestamp in milliseconds
+}
+```
+
+**Error responses:**
+
+| Status | Error |
+|---|---|
+| 400 | `"Too many active invite tokens"` |
+| 403 | `"Identity key mismatch"` |
+| 404 | `"User not found"` |
+
+---
+
+### GET /api/auth/resolve-invite/:token
+
+Resolve an invite token to get the inviter's key material.
+
+**Auth required:** Yes
+
+**Rate limit:** 10 requests / 1 minute per user.
+
+**URL params:**
+
+| Param | Type | Description |
+|---|---|---|
+| `token` | string | Invite token (1-128 chars, base64url). |
+
+**Success response:** `200 OK`
+
+```typescript
+{
+  id: string
+  username: string
+  identityKey: string
+  exchangeKey: string
+  exchangeIdentityKey: string
+  signedPrekey: string
+  signedPrekeySignature: string
+  expiresAt: number
+}
+```
+
+**Error responses:**
+
+| Status | Error |
+|---|---|
+| 400 | `"Cannot resolve your own invite"` |
+| 404 | `"Invite not found or expired"` |
+| 410 | `"Invite token has expired"` |
+
+---
+
+### PUT /api/auth/discoverable
+
+Toggle whether the user is discoverable by username search.
+
+**Auth required:** Yes
+
+**Rate limit:** 20 requests / 1 minute per user.
+
+**Request body:**
+
+```typescript
+{
+  userId: string
+  discoverable: boolean
+}
+```
+
+**Success response:** `200 OK`
+
+```typescript
+{
+  ok: true
+  discoverable: boolean
+}
+```
+
+**Error responses:**
+
+| Status | Error |
+|---|---|
+| 403 | `"Identity key mismatch"` |
+| 404 | `"User not found"` |
+
+---
+
+### GET /api/profile/:userId
+
+Get user profile.
+
+**Auth required:** Yes
+
+**Rate limit:** 30 requests / 1 minute per user.
+
+Non-discoverable users return `404` for non-self requests.
+
+**URL params:**
+
+| Param | Type | Description |
+|---|---|---|
+| `userId` | string | UUID of the target user. |
+
+**Success response:** `200 OK`
+
+```typescript
+{
+  id: string
+  username: string
+  displayName: string
+  avatarFileId: string
+  discoverable: boolean
+}
+```
+
+---
+
+### PUT /api/profile/:userId
+
+Update own profile.
+
+**Auth required:** Yes
+
+**Rate limit:** 30 requests / 1 minute per user.
+
+The request identity key must match the target user's stored identity key.
+
+**URL params:**
+
+| Param | Type | Description |
+|---|---|---|
+| `userId` | string | UUID of the profile to update. |
+
+**Request body:**
+
+```typescript
+{
+  displayName?: string | null
+  avatarFileId?: string | null
+}
+```
+
+**Success response:** `200 OK`
+
+```typescript
+{
+  id: string
+  username: string
+  displayName: string
+  avatarFileId: string
+  discoverable: boolean
+}
+```
+
+**Error responses:**
+
+| Status | Error |
+|---|---|
+| 403 | `"Cannot edit another user's profile"` |
+
+---
+
+### GET /api/push/vapid-key
+
+Get the VAPID public key for push notification registration.
+
+**Auth required:** No
+
+**Success response:** `200 OK`
+
+```typescript
+{
+  vapidPublicKey: string
+}
+```
+
+**Error responses:**
+
+| Status | Error |
+|---|---|
+| 503 | `"Push notifications not configured"` |
+
+---
+
+### POST /api/push/subscribe
+
+Save a push notification subscription.
+
+**Auth required:** Yes
+
+**Rate limit:** 20 requests / 1 minute per user.
+
+The request identity key must match the userId.
+
+**Request body:**
+
+```typescript
+{
+  userId: string
+  subscription: {
+    endpoint: string
+    keys: {
+      p256dh: string
+      auth: string
+    }
+  }
+}
+```
+
+**Success response:** `200 OK`
+
+```json
+{ "ok": true }
+```
+
+---
+
+### POST /api/push/unsubscribe
+
+Remove a push notification subscription.
+
+**Auth required:** Yes
+
+**Rate limit:** 20 requests / 1 minute per user.
+
+The request identity key must match the userId.
+
+**Request body:**
+
+```typescript
+{
+  userId: string
+}
+```
+
+**Success response:** `200 OK`
+
+```json
+{ "ok": true }
+```
+
+---
+
+### POST /api/files/upload
+
+Upload an encrypted file blob.
+
+**Auth required:** Yes
+
+**Rate limit:** 30 requests / 1 minute per user. Max 5 MB per file. Max 500 files per user. Files expire in 30 days.
+
+**Request body:**
+
+```typescript
+{
+  data: string            // Base64-encoded file data
+  mimeHint?: string       // Optional MIME type hint
+  recipientId?: string    // Optional UUID; restricts download access to uploader and recipient
+}
+```
+
+**Success response:** `201 Created`
+
+```typescript
+{
+  fileId: string
+  size: number
+  expiresAt: number       // Unix timestamp in milliseconds
+}
+```
+
+---
+
+### GET /api/files/:fileId
+
+Download a file as JSON (legacy).
+
+**Auth required:** Yes
+
+**Rate limit:** 120 requests / 1 minute per user.
+
+Access control: only the uploader or the designated recipient (if `recipientId` was set at upload) can download.
+
+**URL params:**
+
+| Param | Type | Description |
+|---|---|---|
+| `fileId` | string | UUID of the file. |
+
+**Success response:** `200 OK`
+
+```typescript
+{
+  fileId: string
+  data: string            // Base64-encoded file data
+  mimeHint: string
+  size: number
+}
+```
+
+**Error responses:**
+
+| Status | Error |
+|---|---|
+| 403 | `"Access denied"` |
+| 410 | `"File expired"` |
+
+---
+
+### GET /api/files/:fileId/raw
+
+Stream a file as binary (preferred).
+
+**Auth required:** Yes
+
+**Rate limit:** 120 requests / 1 minute per user. Same access control as `GET /api/files/:fileId`.
+
+**URL params:**
+
+| Param | Type | Description |
+|---|---|---|
+| `fileId` | string | UUID of the file. |
+
+Returns binary data with `Content-Type: application/octet-stream`. Additional headers: `X-File-Id` and `X-Mime-Hint`.
+
+**Error responses:**
+
+| Status | Error |
+|---|---|
+| 403 | `"Access denied"` |
+| 410 | `"File expired"` |
+
+---
+
+### POST /api/groups/create
+
+Create a group.
+
+**Auth required:** Yes
+
+**Rate limit:** 30 requests / 1 minute per user.
+
+**Request body:**
+
+```typescript
+{
+  name: string          // 1-64 chars, trimmed
+  memberIds: string[]   // Max 49 additional members (50 including creator)
+}
+```
+
+The creator automatically becomes an admin. Other `memberIds` are validated and added as members.
+
+**Success response:** `201 Created`
+
+```typescript
+{
+  id: string
+  name: string
+  members: Array<{ userId: string, role: string }>
+}
+```
+
+---
+
+### GET /api/groups
+
+List the authenticated user's groups.
+
+**Auth required:** Yes
+
+**Success response:** `200 OK`
+
+```typescript
+{
+  groups: Array<{
+    id: string
+    name: string
+    creator_id: string
+    members: Array<{ userId: string, role: string }>
+  }>
+}
+```
+
+---
+
+### GET /api/groups/:groupId
+
+Get group details. The authenticated user must be a member.
+
+**Auth required:** Yes
+
+**URL params:**
+
+| Param | Type | Description |
+|---|---|---|
+| `groupId` | string | UUID of the group. |
+
+**Success response:** `200 OK`
+
+```typescript
+{
+  id: string
+  name: string
+  creator_id: string
+  members: Array<{ userId: string, role: string }>
+}
+```
+
+---
+
+### POST /api/groups/:groupId/members
+
+Add a member to a group. Admin only. Max 50 total members.
+
+**Auth required:** Yes
+
+**Rate limit:** 30 requests / 1 minute per user.
+
+**URL params:**
+
+| Param | Type | Description |
+|---|---|---|
+| `groupId` | string | UUID of the group. |
+
+**Request body:**
+
+```typescript
+{
+  userId: string    // UUID of the user to add
+}
+```
+
+**Success response:** `200 OK`
+
+```typescript
+{
+  ok: true
+  members: Array<{ userId: string, role: string }>
+}
+```
+
+---
+
+### DELETE /api/groups/:groupId/members/:userId
+
+Remove a member from a group, or leave the group.
+
+**Auth required:** Yes
+
+**URL params:**
+
+| Param | Type | Description |
+|---|---|---|
+| `groupId` | string | UUID of the group. |
+| `userId` | string | UUID of the member to remove. |
+
+Any member can remove themselves. Admins can remove others. If the group empties, it is deleted. If an admin leaves, the next member is promoted to admin.
+
+**Success response:** `200 OK`
+
+```typescript
+{
+  ok: true
+  members: Array<{ userId: string, role: string }>
+}
+```
+
+or, if the group was deleted:
+
+```typescript
+{
+  ok: true
+  deleted: true
+}
+```
+
+---
+
 ## 4. WebSocket Protocol
 
 ### Connection
@@ -747,6 +1264,8 @@ Notify a recipient about typing status.
 
 Sending to yourself is silently ignored.
 
+Events from blocked users are silently dropped.
+
 The server relays to the recipient:
 
 ```typescript
@@ -771,6 +1290,8 @@ Send read receipts for messages.
 ```
 
 Sending to yourself is silently ignored.
+
+Events from blocked users are silently dropped.
 
 The server relays to the recipient:
 
