@@ -1,0 +1,23 @@
+.github/workflows/ci.yml
+  596101e167a3a48c 25-26,43-44,59-60,76-77,92-93,109-110,127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "77ccf8c37a68adc44c0872a985862a8a8f1b00fd",
+  "prompts": {
+    "596101e167a3a48c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d3f233c6-ff48-4d2a-9ae8-46694ca7ff4a",
+        "model": "<synthetic>"
+      },
+      "human_author": "rekonov",
+      "messages": [],
+      "total_additions": 13,
+      "total_deletions": 13,
+      "accepted_lines": 13,
+      "overriden_lines": 0
+    }
+  }
+}
