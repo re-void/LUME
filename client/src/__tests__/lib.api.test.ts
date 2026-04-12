@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // ── Hoisted mocks ───────────────��────────────────────────────────────────────
 
 const mocks = vi.hoisted(() => ({
+  vaultHasKeys: vi.fn(() => false),
   vaultSignRequest: vi.fn((_method: string, path: string) => ({
     'X-Lume-Identity-Key': 'test-signing-pk',
     'X-Lume-Signature': 'mock-base64-signature',
@@ -19,6 +20,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/crypto/keyVault', () => ({
+  vaultHasKeys: mocks.vaultHasKeys,
   vaultSignRequest: mocks.vaultSignRequest,
 }));
 
