@@ -2,7 +2,7 @@
  * API клиент для взаимодействия с сервером
  */
 
-import { vaultSignRequest } from '@/crypto/keyVault';
+import { vaultHasKeys, vaultSignRequest } from '@/crypto/keyVault';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
@@ -83,11 +83,16 @@ export interface UserBundle {
 
 
 export const authApi = {
-    register: (data: RegisterData) =>
-        request<{ id: string; username: string; message: string }>('/auth/register', {
+    register: (data: RegisterData) => {
+        const headers = vaultHasKeys()
+            ? vaultSignRequest('POST', '/auth/register', data)
+            : {};
+        return request<{ id: string; username: string; message: string }>('/auth/register', {
             method: 'POST',
             body: JSON.stringify(data),
-        }),
+            headers,
+        });
+    },
 
     checkUsername: (username: string) =>
         request<{ available: boolean; reason?: string }>(`/auth/check/${username}`),

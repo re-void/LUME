@@ -78,20 +78,55 @@ export default function RecoverPage() {
       // Set vault early so API calls can sign requests via vault
       vaultSetAuth(identity, masterKey);
 
+      // Generate prekey bundle early — needed for both happy path and rebind
+      const preKeyBundle = generatePreKeyBundle(
+        identity.exchange,
+        identity.signing,
+        20,
+      );
+
       const { data, error: getUserError } = await authApi.getUser(
         username,
       );
 
-      if (getUserError || !data) {
-        vaultClear();
-        setError("Account not found on server");
-        return;
-      }
+      let wasRebind = false;
+      let resolvedUserId: string;
+      let resolvedUsername: string;
 
-      if (data.identityKey !== identity.signing.publicKey) {
+      if (getUserError === "User not found" || (!getUserError && !data)) {
+        // Server DB reset or account missing — rebind silently.
+        // Vault holds keys from vaultSetAuth above, so authApi.register will auto-sign.
+        const { data: rebound, error: rebindError } = await authApi.register({
+          username,
+          identityKey: identity.signing.publicKey,
+          exchangeIdentityKey: identity.exchange.publicKey,
+          signedPrekey: preKeyBundle.signedPreKey.publicKey,
+          signedPrekeySignature: preKeyBundle.signature,
+          oneTimePrekeys: preKeyBundle.oneTimePreKeys.map((key, i) => ({
+            id: `${username}-prekey-${Date.now()}-${i}`,
+            publicKey: key.publicKey,
+          })),
+        });
+        if (!rebound || rebindError) {
+          vaultClear();
+          setError("Could not reach server. Try again later.");
+          return;
+        }
+        wasRebind = true;
+        resolvedUserId = rebound.id;
+        resolvedUsername = rebound.username;
+      } else if (getUserError) {
         vaultClear();
-        setError("Recovery phrase does not match this username");
+        setError(getUserError);
         return;
+      } else {
+        if (data!.identityKey !== identity.signing.publicKey) {
+          vaultClear();
+          setError("Recovery phrase does not match this username");
+          return;
+        }
+        resolvedUserId = data!.id;
+        resolvedUsername = data!.username;
       }
 
       await saveIdentityKeys(identity, masterKey);
@@ -100,15 +135,10 @@ export default function RecoverPage() {
       const settings = await loadSettings();
       await saveSettings({
         ...settings,
-        username: data.username,
-        userId: data.id,
+        username: resolvedUsername,
+        userId: resolvedUserId,
       });
 
-      const preKeyBundle = generatePreKeyBundle(
-        identity.exchange,
-        identity.signing,
-        20,
-      );
       await savePreKeyMaterial(
         {
           signedPreKey: preKeyBundle.signedPreKey,
@@ -117,36 +147,39 @@ export default function RecoverPage() {
         },
         masterKey,
       );
-      const { error: rotateError } = await authApi.updateSignedPrekey(
-        data.id,
-        preKeyBundle.signedPreKey.publicKey,
-        preKeyBundle.signature,
-      );
-      if (rotateError) {
-        if (process.env.NODE_ENV !== "production")
-          console.warn(
-            "Signed prekey rotation skipped during recovery:",
-            rotateError,
-          );
-      }
 
-      try {
-        await authApi.uploadPrekeys(
-          data.id,
-          preKeyBundle.oneTimePreKeys.map((key, i) => ({
-            id: `recovery-prekey-${Date.now()}-${i}`,
-            publicKey: key.publicKey,
-          })),
+      if (!wasRebind) {
+        const { error: rotateError } = await authApi.updateSignedPrekey(
+          resolvedUserId,
+          preKeyBundle.signedPreKey.publicKey,
+          preKeyBundle.signature,
         );
-      } catch (uploadError) {
-        if (process.env.NODE_ENV !== "production")
-          console.warn("Prekey refill failed after recovery:", uploadError);
+        if (rotateError) {
+          if (process.env.NODE_ENV !== "production")
+            console.warn(
+              "Signed prekey rotation skipped during recovery:",
+              rotateError,
+            );
+        }
+
+        try {
+          await authApi.uploadPrekeys(
+            resolvedUserId,
+            preKeyBundle.oneTimePreKeys.map((key, i) => ({
+              id: `recovery-prekey-${Date.now()}-${i}`,
+              publicKey: key.publicKey,
+            })),
+          );
+        } catch (uploadError) {
+          if (process.env.NODE_ENV !== "production")
+            console.warn("Prekey refill failed after recovery:", uploadError);
+        }
       }
 
       setMnemonic("");
       setPin("");
       setPinConfirm("");
-      setAuth(data.id, data.username);
+      setAuth(resolvedUserId, resolvedUsername);
       router.push("/chats");
     } catch (recoverError) {
       vaultClear();

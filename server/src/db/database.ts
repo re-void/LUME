@@ -240,6 +240,14 @@ const insertPrekey = db.prepare(`
   VALUES (?, ?, ?)
 `)
 
+const deletePrekeysForUser = db.prepare(`
+  DELETE FROM one_time_prekeys WHERE user_id = ?
+`)
+
+const updateExchangeIdentityKey = db.prepare(`
+  UPDATE users SET exchange_identity_key = ? WHERE id = ?
+`)
+
 const getAndDeletePrekey = db.prepare(`
   DELETE FROM one_time_prekeys
   WHERE id = (
@@ -530,6 +538,20 @@ export const database = {
       }
     })
     insertMany(prekeys)
+  },
+
+  replacePrekeys(userId: string, prekeys: Array<{ id: string; publicKey: string }>): void {
+    const replace = db.transaction(() => {
+      deletePrekeysForUser.run(userId)
+      for (const key of prekeys) {
+        insertPrekey.run(`${userId}:${key.id}`, userId, key.publicKey)
+      }
+    })
+    replace()
+  },
+
+  updateExchangeIdentityKey(userId: string, exchangeIdentityKey: string): void {
+    updateExchangeIdentityKey.run(exchangeIdentityKey, userId)
   },
 
   peekPrekey(userId: string): string | null {
