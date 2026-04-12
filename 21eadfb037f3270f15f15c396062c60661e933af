@@ -1,0 +1,35 @@
+server/test/auth.middleware.test.ts
+  596101e167a3a48c 56,58
+client/src/app/recover/page.tsx
+  596101e167a3a48c 81-87,92-94,96-118,120,122-129,138-139,151-155,157-176,182
+server/src/db/database.ts
+  596101e167a3a48c 243-250,543-556
+server/src/routes/auth.ts
+  596101e167a3a48c 130,134-145,147-179,185,191-193
+server/test/auth.rebind.test.ts
+  596101e167a3a48c 1-185
+client/src/lib/api.ts
+  596101e167a3a48c 5,86-90,93-95
+client/src/app/unlock/page.tsx
+  596101e167a3a48c 128-160
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.2.8",
+  "base_commit_sha": "21eadfb037f3270f15f15c396062c60661e933af",
+  "prompts": {
+    "596101e167a3a48c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d3f233c6-ff48-4d2a-9ae8-46694ca7ff4a",
+        "model": "<synthetic>"
+      },
+      "human_author": "rekonov",
+      "messages": [],
+      "total_additions": 1426,
+      "total_deletions": 162,
+      "accepted_lines": 376,
+      "overriden_lines": 0
+    }
+  }
+}
