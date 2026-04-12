@@ -53,9 +53,9 @@ describe('requireSignature middleware', () => {
     const app = buildApp();
     const body = { username: 'alice_01', identityKey, signedPrekey: identityKey, signedPrekeySignature: encodeBase64(nacl.sign.detached(new TextEncoder().encode(identityKey), keyPair.secretKey)) };
     body.oneTimePrekeys = [];
-    const headers = signedHeaders('POST', '/api/auth/register', body, keyPair);
+    const headers = signedHeaders('POST', '/auth/register', body, keyPair);
     const res = await request(app).post('/api/auth/register').set(headers).send(body);
-    // register route does not require signature, so middleware not used here; still should succeed
+    // register is now dual-mode: signed headers trigger requireSignature inside the handler
     expect([201, 400, 409]).toContain(res.status); // allow conflicts on reruns
   });
 

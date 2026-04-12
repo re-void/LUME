@@ -127,18 +127,70 @@ router.post(
   registerRateLimit,
   globalRegisterRateLimit,
   validateBody(RegisterBodySchema),
-  (req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     try {
       const body = req.body as import('../schemas/auth').RegisterBody
 
+      // Detect signed headers — if present, run requireSignature inside the handler
+      const hasSignedHeaders = Boolean(
+        req.headers['x-lume-identity-key'] && req.headers['x-lume-signature']
+      )
+
+      if (hasSignedHeaders) {
+        await new Promise<void>((resolve, reject) => {
+          requireSignature(req, res, (err?: unknown) => (err ? reject(err) : resolve()))
+        })
+        if (res.headersSent) return
+      }
+
       const existingUser = database.getUserByUsername(body.username)
+
+      // Branch A: rebind — existing row, signed, identityKey matches
+      if (
+        existingUser &&
+        hasSignedHeaders &&
+        req.user?.identityKey === body.identityKey &&
+        existingUser.identity_key === body.identityKey
+      ) {
+        if (!verifySignature(body.signedPrekey, body.signedPrekeySignature, body.identityKey)) {
+          res.status(400).json({ error: 'Invalid signed prekey signature' })
+          return
+        }
+
+        database.setSignedPrekey(existingUser.id, body.signedPrekey, body.signedPrekeySignature)
+        database.replacePrekeys(existingUser.id, body.oneTimePrekeys ?? [])
+
+        if (
+          body.exchangeIdentityKey &&
+          body.exchangeIdentityKey !== existingUser.exchange_identity_key
+        ) {
+          database.updateExchangeIdentityKey(existingUser.id, body.exchangeIdentityKey)
+        }
+
+        res.status(201).json({
+          id: existingUser.id,
+          username: existingUser.username,
+          message: 'Rebind successful',
+        })
+        audit('rebind', { userId: existingUser.id, username: existingUser.username })
+        return
+      }
+
+      // Branch B: conflict — existing row, different identityKey or unsigned
       if (existingUser) {
         res.status(409).json({ error: 'Username already taken' })
         return
       }
 
+      // Branch C: no existing row — new registration
       if (!verifySignature(body.signedPrekey, body.signedPrekeySignature, body.identityKey)) {
         res.status(400).json({ error: 'Invalid signed prekey signature' })
+        return
+      }
+
+      // If signed, assert body.identityKey matches the signing key
+      if (hasSignedHeaders && req.user!.identityKey !== body.identityKey) {
+        res.status(403).json({ error: 'Identity key mismatch' })
         return
       }
 

@@ -11,7 +11,6 @@ import {
   loadPreKeyMaterial,
   savePreKeyMaterial,
   deriveMasterKeyFromPin,
-  savePinHash,
   checkPinLockout,
   recordPinFailure,
   resetPinFailures,
@@ -32,10 +31,6 @@ export default function UnlockPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [attempts, setAttempts] = useState(0);
-  const [showReRegisterWarning, setShowReRegisterWarning] = useState(false);
-  const [pendingIdentity, setPendingIdentity] = useState<Awaited<
-    ReturnType<typeof loadIdentityKeys>
-  > | null>(null);
   const [shaking, setShaking] = useState(false);
   const [bouncingDot, setBouncingDot] = useState<number | null>(null);
   const hiddenInputRef = useRef<HTMLInputElement>(null);
@@ -130,12 +125,39 @@ export default function UnlockPage() {
             });
           }
         } else if (serverError === "User not found") {
-          // Server DB was reset or the account was deleted.
-          // Show a warning before re-registering — existing contacts won't be able to decrypt old messages.
-          vaultClear();
-          setPendingIdentity(identity);
-          setShowReRegisterWarning(true);
-          return;
+          // Server DB reset — rebind silently. Vault still holds keys from
+          // vaultSetAuth above, so authApi.register will auto-sign.
+          const bundle = generatePreKeyBundle(identity.exchange, identity.signing, 20);
+          const { data: rebound, error: rebindError } = await authApi.register({
+            username: resolvedUsername,
+            identityKey: identity.signing.publicKey,
+            exchangeIdentityKey: identity.exchange.publicKey,
+            signedPrekey: bundle.signedPreKey.publicKey,
+            signedPrekeySignature: bundle.signature,
+            oneTimePrekeys: bundle.oneTimePreKeys.map((key, i) => ({
+              id: `${resolvedUsername}-prekey-${Date.now()}-${i}`,
+              publicKey: key.publicKey,
+            })),
+          });
+          if (!rebound || rebindError) {
+            vaultClear();
+            errorFeedback();
+            setShaking(true);
+            setError("Could not reach server. Try again or recover with phrase.");
+            return;
+          }
+          await savePreKeyMaterial(
+            {
+              signedPreKey: bundle.signedPreKey,
+              oneTimePreKeys: bundle.oneTimePreKeys,
+              updatedAt: Date.now(),
+            },
+            masterKey,
+          );
+          resolvedUserId = rebound.id;
+          resolvedUsername = rebound.username;
+          await saveSettings({ ...settings, userId: resolvedUserId, username: resolvedUsername });
+          // fall through to the existing success path (SPK rotation, setAuth, etc.)
         }
       }
 
@@ -199,68 +221,6 @@ export default function UnlockPage() {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && pin.length >= 4) {
       handleUnlock();
-    }
-  };
-
-  const confirmReRegister = async () => {
-    if (!pendingIdentity) return;
-    setLoading(true);
-    setShowReRegisterWarning(false);
-    try {
-      const settings = await loadSettings();
-      const resolvedUsername = settings.username?.replace(/^@+/, "").trim();
-      if (!resolvedUsername) {
-        setError("Profile missing. Recover account with phrase.");
-        return;
-      }
-
-      const bootstrapBundle = generatePreKeyBundle(
-        pendingIdentity.exchange,
-        pendingIdentity.signing,
-        20,
-      );
-      const { data: created, error: createError } = await authApi.register({
-        username: resolvedUsername,
-        identityKey: pendingIdentity.signing.publicKey,
-        exchangeIdentityKey: pendingIdentity.exchange.publicKey,
-        signedPrekey: bootstrapBundle.signedPreKey.publicKey,
-        signedPrekeySignature: bootstrapBundle.signature,
-        oneTimePrekeys: bootstrapBundle.oneTimePreKeys.map((key, i) => ({
-          id: `${resolvedUsername}-prekey-${i}`,
-          publicKey: key.publicKey,
-        })),
-      });
-
-      if (!created || createError) {
-        setError("Re-registration failed. Try recovering with your phrase.");
-        return;
-      }
-
-      const reRegMasterKey = await deriveMasterKeyFromPin(pin);
-      await savePreKeyMaterial(
-        {
-          signedPreKey: bootstrapBundle.signedPreKey,
-          oneTimePreKeys: bootstrapBundle.oneTimePreKeys,
-          updatedAt: Date.now(),
-        },
-        reRegMasterKey,
-      );
-      await savePinHash(pin);
-
-      await saveSettings({
-        ...settings,
-        userId: created.id,
-        username: created.username,
-      });
-
-      vaultSetAuth(pendingIdentity, reRegMasterKey);
-      setAuth(created.id, created.username);
-      router.push("/chats");
-    } catch (e) {
-      console.error("Re-register error:", e);
-      setError("Re-registration error");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -368,45 +328,6 @@ export default function UnlockPage() {
         </div>
       </div>
 
-      {showReRegisterWarning && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="lume-panel w-full max-w-md rounded-[var(--radius-lg)] border border-[var(--border)] p-6 sm:p-8 shadow-lg">
-            <h2 className="text-[14px] font-semibold uppercase tracking-[0.14em] text-[var(--text-primary)] mb-4">
-              Account Not Found on Server
-            </h2>
-            <p className="text-[13px] text-[var(--text-secondary)] mb-2">
-              Your account was not found on the server (the database may have
-              been reset).
-            </p>
-            <p className="text-[13px] text-[var(--text-secondary)] mb-6">
-              Re-registering will create a new server identity.{" "}
-              <strong>
-                Existing contacts will not be able to decrypt messages from your
-                previous session.
-              </strong>{" "}
-              They will need to re-verify your safety number.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  setShowReRegisterWarning(false);
-                  setPendingIdentity(null);
-                }}
-                className="flex-1 apple-button-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmReRegister}
-                className="flex-1 apple-button"
-                disabled={loading}
-              >
-                {loading ? "Re-registering..." : "Re-register"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </main>
   );
 }
